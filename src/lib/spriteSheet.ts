@@ -134,9 +134,15 @@ export async function composeSpriteSheet(
       settings.margin * 2 + rowHeights.reduce((total, value) => total + value + settings.padding * 2, 0)
     const width = settings.powerOfTwo || contentWidth
     const height = settings.powerOfTwo || contentHeight
-    if (contentWidth > width || contentHeight > height) {
+    const contentScale = settings.powerOfTwo
+      ? Math.min(1, width / contentWidth, height / contentHeight)
+      : 1
+    if (
+      columnWidths.some((cellWidth) => cellWidth * contentScale < 1) ||
+      rowHeights.some((cellHeight) => cellHeight * contentScale < 1)
+    ) {
       throw new Error(
-        `The frames need ${contentWidth}×${contentHeight}px, which exceeds the selected ${settings.powerOfTwo}px texture.`,
+        `The ${settings.powerOfTwo}px texture is too small for a ${columns}×${rows} grid. Choose a larger power-of-two size.`,
       )
     }
     if (width > 16384 || height > 16384 || width * height > 268_435_456) {
@@ -148,10 +154,23 @@ export async function composeSpriteSheet(
     canvas.height = height
     const context = canvas.getContext('2d', { alpha: true })
     if (!context) throw new Error('Canvas rendering is not available.')
+    context.imageSmoothingEnabled = true
+    context.imageSmoothingQuality = 'high'
     if (settings.background !== 'transparent') {
       context.fillStyle =
         settings.background === 'custom' ? settings.customColor : settings.background
       context.fillRect(0, 0, width, height)
+    }
+
+    const scaledContentWidth = contentWidth * contentScale
+    const scaledContentHeight = contentHeight * contentScale
+    const contentOffsetX = settings.powerOfTwo ? (width - scaledContentWidth) / 2 : 0
+    const contentOffsetY = settings.powerOfTwo ? (height - scaledContentHeight) / 2 : 0
+    if (contentScale < 1) {
+      onProgress(
+        0.5,
+        `Fitting ${contentWidth}×${contentHeight}px into ${width}×${height}px · ${Math.round(contentScale * 100)}%`,
+      )
     }
 
     const resultFrames: SpriteSheetResult['frames'] = []
@@ -160,19 +179,21 @@ export async function composeSpriteSheet(
       const frame = prepared[index]
       const column = index % columns
       const row = Math.floor(index / columns)
-      const cellWidth = columnWidths[column]
-      const cellHeight = rowHeights[row]
-      const cellX =
+      const rawCellX =
         settings.margin +
         columnWidths.slice(0, column).reduce((total, value) => total + value + settings.padding * 2, 0) +
         settings.padding
-      const cellY =
+      const rawCellY =
         settings.margin +
         rowHeights.slice(0, row).reduce((total, value) => total + value + settings.padding * 2, 0) +
         settings.padding
-      const scale = Math.min(1, cellWidth / frame.width, cellHeight / frame.height)
-      const drawWidth = Math.max(1, Math.round(frame.width * scale))
-      const drawHeight = Math.max(1, Math.round(frame.height * scale))
+      const cellX = Math.round(contentOffsetX + rawCellX * contentScale)
+      const cellY = Math.round(contentOffsetY + rawCellY * contentScale)
+      const cellWidth = Math.max(1, Math.floor(columnWidths[column] * contentScale))
+      const cellHeight = Math.max(1, Math.floor(rowHeights[row] * contentScale))
+      const frameScale = Math.min(1, cellWidth / frame.width, cellHeight / frame.height)
+      const drawWidth = Math.max(1, Math.round(frame.width * frameScale))
+      const drawHeight = Math.max(1, Math.round(frame.height * frameScale))
       const offset = alignmentOffset(
         settings.alignment,
         cellWidth,
@@ -206,8 +227,8 @@ export async function composeSpriteSheet(
       url: URL.createObjectURL(blob),
       width,
       height,
-      cellWidth: Math.max(...columnWidths),
-      cellHeight: Math.max(...rowHeights),
+      cellWidth: Math.max(...resultFrames.map((frame) => frame.width)),
+      cellHeight: Math.max(...resultFrames.map((frame) => frame.height)),
       rows,
       columns,
       frames: resultFrames,

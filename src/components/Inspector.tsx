@@ -217,7 +217,7 @@ export function Inspector({
             <Section title="Texture">
               <Field label="Power of two">
                 <Select value={project.sheet.powerOfTwo} onChange={(e) => updateSheet({ powerOfTwo: Number(e.target.value) as typeof project.sheet.powerOfTwo })}>
-                  <option value={0}>Off · fit content</option><option value={256}>256 × 256</option><option value={512}>512 × 512</option><option value={1024}>1024 × 1024</option><option value={2048}>2048 × 2048</option><option value={4096}>4096 × 4096</option>
+                  <option value={0}>Off · natural size</option><option value={256}>Fit into 256 × 256</option><option value={512}>Fit into 512 × 512</option><option value={1024}>Fit into 1024 × 1024</option><option value={2048}>Fit into 2048 × 2048</option><option value={4096}>Fit into 4096 × 4096</option>
                 </Select>
               </Field>
               <Field label="Background">
