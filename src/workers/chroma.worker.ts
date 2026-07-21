@@ -100,6 +100,71 @@ function gaussianFeather(
   return output
 }
 
+function protectInteriorNeutralColors(
+  matte: Uint8ClampedArray,
+  sourceAlpha: Uint8ClampedArray,
+  candidates: Uint8Array,
+  width: number,
+  height: number,
+  transitionPasses: number,
+) {
+  const queue = new Int32Array(width * height)
+  let head = 0
+  let tail = 0
+  const enqueue = (index: number) => {
+    if (candidates[index] !== 1) return
+    candidates[index] = 2
+    queue[tail] = index
+    tail += 1
+  }
+
+  for (let x = 0; x < width; x += 1) {
+    enqueue(x)
+    if (height > 1) enqueue((height - 1) * width + x)
+  }
+  for (let y = 1; y < height - 1; y += 1) {
+    enqueue(y * width)
+    if (width > 1) enqueue(y * width + width - 1)
+  }
+
+  while (head < tail) {
+    const index = queue[head]
+    head += 1
+    const x = index % width
+    const y = Math.floor(index / width)
+    if (x > 0) enqueue(index - 1)
+    if (x + 1 < width) enqueue(index + 1)
+    if (y > 0) enqueue(index - width)
+    if (y + 1 < height) enqueue(index + width)
+  }
+
+  for (let pass = 0; pass < transitionPasses; pass += 1) {
+    let expanded = false
+    for (let index = 0; index < candidates.length; index += 1) {
+      if (candidates[index] !== 3) continue
+      const x = index % width
+      const y = Math.floor(index / width)
+      const touchesBackground =
+        (x > 0 && candidates[index - 1] === 2) ||
+        (x + 1 < width && candidates[index + 1] === 2) ||
+        (y > 0 && candidates[index - width] === 2) ||
+        (y + 1 < height && candidates[index + width] === 2)
+      if (touchesBackground) {
+        candidates[index] = 4
+        expanded = true
+      }
+    }
+    if (!expanded) break
+    for (let index = 0; index < candidates.length; index += 1) {
+      if (candidates[index] === 4) candidates[index] = 2
+    }
+  }
+
+  for (let pixel = 0; pixel < matte.length; pixel += 1) {
+    if (candidates[pixel] !== 2) matte[pixel] = sourceAlpha[pixel]
+  }
+}
+
 self.onmessage = ({ data: message }: MessageEvent<ChromaMessage>) => {
   const pixels = new Uint8ClampedArray(message.buffer)
   const pixelCount = message.width * message.height
@@ -112,8 +177,9 @@ self.onmessage = ({ data: message }: MessageEvent<ChromaMessage>) => {
   const keyCr = (message.key.r - keyY) * 0.635
   const keyChroma = Math.sqrt(keyCb * keyCb + keyCr * keyCr)
   const neutralKey = keyChroma < 12
-  const innerRadius = 1.5 + message.tolerance * 0.76
-  const outerRadius = innerRadius + 1 + message.softness * 1.35
+  const neutralCandidates = neutralKey ? new Uint8Array(pixelCount) : undefined
+  const innerRadius = 1.5 + message.tolerance * (neutralKey ? 0.32 : 0.76)
+  const outerRadius = innerRadius + 1 + message.softness * (neutralKey ? 1.05 : 1.35)
 
   for (let pixel = 0, index = 0; pixel < pixelCount; pixel += 1, index += 4) {
     const red = pixels[index]
@@ -133,6 +199,20 @@ self.onmessage = ({ data: message }: MessageEvent<ChromaMessage>) => {
     const foreground = smoothstep(innerRadius, outerRadius, distance)
     sourceAlpha[pixel] = alpha
     matte[pixel] = alpha * foreground
+    if (neutralCandidates) {
+      neutralCandidates[pixel] = distance <= innerRadius ? 1 : distance < outerRadius ? 3 : 0
+    }
+  }
+
+  if (neutralCandidates) {
+    protectInteriorNeutralColors(
+      matte,
+      sourceAlpha,
+      neutralCandidates,
+      message.width,
+      message.height,
+      Math.max(1, Math.min(4, Math.round(message.softness / 8))),
+    )
   }
 
   cleanMatte(matte, message.width, message.height, message.noiseReduction)
@@ -168,11 +248,23 @@ self.onmessage = ({ data: message }: MessageEvent<ChromaMessage>) => {
       pixels[index + 2] = 0
       continue
     }
-    if (spill <= 0 || neutralKey || alpha >= 254) continue
+    if (spill <= 0 || alpha >= 254) continue
 
     const red = pixels[index]
     const green = pixels[index + 1]
     const blue = pixels[index + 2]
+    if (neutralKey) {
+      const opacity = Math.max(0.025, alpha / 255)
+      const backgroundShare = 1 - opacity
+      const blend = spill * Math.pow(backgroundShare, 0.65)
+      const recoveredRed = (red - message.key.r * backgroundShare) / opacity
+      const recoveredGreen = (green - message.key.g * backgroundShare) / opacity
+      const recoveredBlue = (blue - message.key.b * backgroundShare) / opacity
+      pixels[index] = clampByte(red + (recoveredRed - red) * blend)
+      pixels[index + 1] = clampByte(green + (recoveredGreen - green) * blend)
+      pixels[index + 2] = clampByte(blue + (recoveredBlue - blue) * blend)
+      continue
+    }
     const luminance = red * 0.2126 + green * 0.7152 + blue * 0.0722
     const projection = Math.max(
       0,

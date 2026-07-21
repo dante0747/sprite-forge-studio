@@ -64,6 +64,11 @@ export function Inspector({
     updateProject(project.id, { animation })
     updatePreferences({ lastAnimation: animation })
   }
+  const keyChannels = project.chroma.color
+    .slice(1)
+    .match(/.{2}/g)
+    ?.map((channel) => Number.parseInt(channel, 16)) ?? [0, 0, 0]
+  const neutralKey = Math.max(...keyChannels) - Math.min(...keyChannels) < 24
 
   const changeTab = (next: InspectorTab) => {
     setTab(next)
@@ -175,7 +180,7 @@ export function Inspector({
                 ))}
               </div>
             </Section>
-            <div className="tip-card"><Sparkles size={16} /><span><strong>Non-destructive key</strong>Your original frames are preserved. Alpha is rendered into exports only.</span></div>
+            <div className="tip-card"><Sparkles size={16} /><span><strong>{neutralKey ? 'Neutral-key protection active' : 'Non-destructive key'}</strong>{neutralKey ? 'Edge-connected analysis protects interior whites and blacks while cleaning backdrop halos.' : 'Your original frames are preserved. Alpha is rendered into exports only.'}</span></div>
           </>
         )}
         {tab === 'layout' && (
