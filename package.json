@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:pages": "tsc -b && vite build --base=/sprite-forge-studio/",
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",

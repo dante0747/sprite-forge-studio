@@ -16,8 +16,8 @@ class OfflineFFmpeg {
     if (!this.loading) {
       this.loading = this.ffmpeg
         .load({
-          coreURL: '/ffmpeg/ffmpeg-core.js',
-          wasmURL: '/ffmpeg/ffmpeg-core.wasm',
+          coreURL: `${import.meta.env.BASE_URL}ffmpeg/ffmpeg-core.js`,
+          wasmURL: `${import.meta.env.BASE_URL}ffmpeg/ffmpeg-core.wasm`,
         })
         .then(() => undefined)
         .finally(() => {

@@ -40,6 +40,25 @@ npm run preview
 
 The production application is written to `dist/`. Serve that directory as a static site. No API server is required. Because browsers restrict Web Workers and WebAssembly on `file://` pages, use any local static HTTP server for offline use.
 
+## GitHub Pages deployment
+
+The workflow in `.github/workflows/deploy-pages.yml` lints and builds every pull request targeting `main`. Pushes to `main` additionally publish the production artifact through GitHub Pages. The Pages build uses `/sprite-forge-studio/` as Vite's base path, including for the bundled FFmpeg runtime and sample video.
+
+One-time repository setup:
+
+1. Open **Settings → Pages** in `dante0747/sprite-forge-studio`.
+2. Under **Build and deployment**, select **GitHub Actions** as the source.
+3. Push the workflow to `main`, or run **Build and deploy GitHub Pages** manually from the Actions tab.
+
+The default project-site URL is `https://dante0747.github.io/sprite-forge-studio/`.
+
+To publish at `https://coderator.dev/sprite-forge-studio/`, use one of these configurations:
+
+- Configure `coderator.dev` as the custom domain of the `dante0747.github.io` user site and point its DNS to GitHub Pages. GitHub then applies that domain to project sites, including this repository path.
+- Keep the existing `coderator.dev` host and configure it as a reverse proxy for `/sprite-forge-studio/` to the default GitHub Pages project URL.
+
+Do not set `coderator.dev` as a custom domain on this project repository: that would claim the domain root rather than only `/sprite-forge-studio/`. The current DNS for `coderator.dev` does not point to GitHub Pages, so one of the routing changes above is required before the requested URL can serve this deployment.
+
 ## Workflow
 
 1. Import one or more clips, or open the included sample.

@@ -305,7 +305,7 @@ function AppContent() {
   const openImport = () => inputRef.current?.click()
   const openSample = async () => {
     try {
-      const response = await fetch('/samples/chroma-bot.webm')
+      const response = await fetch(`${import.meta.env.BASE_URL}samples/chroma-bot.webm`)
       if (!response.ok) throw new Error('The bundled sample could not be loaded.')
       const file = new File([await response.blob()], 'chroma-bot.webm', { type: 'video/webm' })
       await importFiles([file])
