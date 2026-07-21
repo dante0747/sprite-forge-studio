@@ -81,9 +81,30 @@ function ChromaMonitor({
     const bounds = target.getBoundingClientRect()
     const x = Math.floor(((event.clientX - bounds.left) / bounds.width) * source.width)
     const y = Math.floor(((event.clientY - bounds.top) / bounds.height) * source.height)
-    const pixel = source.getContext('2d')?.getImageData(x, y, 1, 1).data
-    if (!pixel) return
-    onColorPick(`#${[pixel[0], pixel[1], pixel[2]].map((v) => v.toString(16).padStart(2, '0')).join('')}`)
+    const radius = 4
+    const sampleX = Math.max(0, x - radius)
+    const sampleY = Math.max(0, y - radius)
+    const sampleWidth = Math.min(source.width - sampleX, radius * 2 + 1)
+    const sampleHeight = Math.min(source.height - sampleY, radius * 2 + 1)
+    const pixels = source
+      .getContext('2d')
+      ?.getImageData(sampleX, sampleY, sampleWidth, sampleHeight).data
+    if (!pixels) return
+    const channels = [[], [], []] as number[][]
+    for (let index = 0; index < pixels.length; index += 4) {
+      if (pixels[index + 3] < 16) continue
+      channels[0].push(pixels[index])
+      channels[1].push(pixels[index + 1])
+      channels[2].push(pixels[index + 2])
+    }
+    if (!channels[0].length) return
+    const color = channels.map((channel) => {
+      channel.sort((left, right) => left - right)
+      const trim = Math.floor(channel.length * 0.2)
+      const values = channel.slice(trim, Math.max(trim + 1, channel.length - trim))
+      return Math.round(values.reduce((total, value) => total + value, 0) / values.length)
+    })
+    onColorPick(`#${color.map((value) => value.toString(16).padStart(2, '0')).join('')}`)
   }
 
   if (!project.frames.length) {
@@ -97,9 +118,9 @@ function ChromaMonitor({
   }
   return (
     <div className={backdropClass(project.chroma.previewBackground)}>
-      <canvas ref={canvasRef} onClick={pick} title="Click to sample a key color" />
+      <canvas ref={canvasRef} onClick={pick} title="Click to sample the surrounding background color" />
       {busy && <span className="monitor-busy">Updating key…</span>}
-      <span className="eyedropper-hint">Click image to sample color</span>
+      <span className="eyedropper-hint">Click background to sample a 9 × 9 area</span>
     </div>
   )
 }
