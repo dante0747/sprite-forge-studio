@@ -5,12 +5,16 @@ SpriteForge Studio is a browser-based video-to-sprite-sheet editor for 2D game w
 ## Highlights
 
 - Batch import for MP4, MOV, AVI, WebM, and MKV sources
+- Automatic frame-gallery creation on import, with every source frame available for cherry-picking
+- Live animation preview that updates immediately when frames are included, excluded, or playback speed changes
+- Frame-accurate video trimming before extraction, with live in/out preview controls
+- Multi-frame selection with copy, cut, paste, delete, and range-select shortcuts
 - Browser-native extraction with a locally bundled FFmpeg WebAssembly fallback
 - Non-destructive, worker-powered chroma key with tolerance, softness, feathering, noise cleanup, and spill suppression
-- Multi-select, delete, duplicate, rename, replace, and drag-to-reorder frame editing
-- Automatic or manual grids, transparent trimming, alignment, padding, margins, manual cells, and power-of-two textures
+- Multi-select, copy, cut, paste, delete, rename, replace, and drag-to-reorder frame editing
+- Automatic or manual grids with independent frame padding, frame spacing, sheet margins, alignment, transparent trimming, and power-of-two textures
 - Sprite-sheet and frame-sequence PNG export, plus ZIP packages with JSON, XML, or CSV metadata and Phaser sample code
-- Source and alpha monitors, packed-sheet preview, animation playback, undo/redo, keyboard controls, progress, cancellation, and persisted preferences
+- Source and alpha monitors, packed-sheet boundary preview, animation playback decoded directly from the generated sheet, undo/redo, keyboard controls, progress, cancellation, and persisted preferences
 - Entirely client-side processing; no backend or cloud upload
 
 ## Requirements
@@ -61,12 +65,13 @@ Do not set `coderator.dev` as a custom domain on this project repository: that w
 
 ## Workflow
 
-1. Import one or more clips, or open the included sample.
-2. Choose a frame range, interval or exact count, then extract.
-3. Sample the background in the Transparency monitor and tune the key.
-4. Select, remove, rename, replace, duplicate, or drag frames into order.
-5. Configure the layout and generate the sprite sheet.
-6. Preview the packed animation and export a PNG, frame ZIP, or complete package.
+1. Import one or more clips, or open the included sample. SpriteForge builds a complete frame gallery automatically.
+2. Cherry-pick any number of frames in the gallery while watching the chosen sequence animate live. Adjust its playback speed as needed.
+3. Optionally trim the source or change the gallery density, then rebuild the gallery.
+4. Sample the background in the Transparency monitor and tune the key.
+5. Copy, cut, paste, remove, rename, replace, or drag groups of frames into order in the timeline.
+6. Configure frame padding, spacing, sheet margin, and layout, then generate the sprite sheet from the chosen sequence.
+7. Preview animation decoded from the generated sheet and export a PNG, chosen-frame ZIP, or complete package.
 
 ## Keyboard shortcuts
 
@@ -76,6 +81,12 @@ Do not set `coderator.dev` as a custom domain on this project repository: that w
 | `←` / `→` | Previous or next frame |
 | `Delete` | Delete the selected/current frame |
 | `Ctrl/Cmd+A` | Select all frames |
+| `Shift+click` | Select a continuous frame range |
+| `Ctrl/Cmd+C` | Copy selected/current frames |
+| `Ctrl/Cmd+X` | Cut selected/current frames |
+| `Ctrl/Cmd+V` | Paste copied frames after the selection |
+| `F2` | Rename the current frame |
+| `Escape` | Clear frame selection |
 | `Ctrl/Cmd+Z` | Undo |
 | `Ctrl/Cmd+Y` | Redo |
 | `Ctrl/Cmd+S` | Export complete ZIP package |

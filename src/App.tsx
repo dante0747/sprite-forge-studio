@@ -28,6 +28,7 @@ function AppContent() {
     updateProject,
     updateFrames,
     setProcessing,
+    updatePreferences,
     undo,
     redo,
   } = useEditor()
@@ -82,6 +83,37 @@ function AppContent() {
     setProcessing({ active: false, progress: 0, task: '', detail: '', startedAt: 0 })
   }, [setProcessing])
 
+  const decodeFrames = useCallback(
+    async (
+      project: VideoProject,
+      signal: AbortSignal,
+      onProgress: (value: number, detail: string) => void,
+    ) => {
+      try {
+        return await extractFramesNative(
+          project.file,
+          project.metadata,
+          project.trim,
+          project.extraction,
+          signal,
+          onProgress,
+        )
+      } catch (error) {
+        if ((error as Error).name === 'AbortError') throw error
+        onProgress(0.03, 'Switching to the offline FFmpeg decoder…')
+        return offlineFFmpeg.extract(
+          project.file,
+          project.metadata,
+          project.trim,
+          project.extraction,
+          signal,
+          onProgress,
+        )
+      }
+    },
+    [],
+  )
+
   const importFiles = useCallback(
     async (files: File[]) => {
       const videos = files.filter(isSupportedVideo)
@@ -89,48 +121,87 @@ function AppContent() {
         toast('error', 'Unsupported file', 'Choose an MP4, MOV, AVI, WebM or MKV video.')
         return
       }
-      const controller = begin(videos.length > 1 ? 'Importing animations' : 'Importing animation')
+      const task = videos.length > 1 ? 'Building frame galleries' : 'Building frame gallery'
+      const controller = begin(task)
+      let currentProjectId: string | undefined
       try {
         for (let index = 0; index < videos.length; index += 1) {
           const file = videos[index]
+          const baseProgress = index / videos.length
+          const fileShare = 1 / videos.length
           if (controller.signal.aborted) throw new DOMException('Canceled', 'AbortError')
           if (file.size > 500 * 1024 * 1024) {
             toast('info', 'Large source video', `${file.name} is ${formatBytes(file.size)}. Extraction may use substantial memory.`)
           }
-          progress('Importing animation', index / videos.length, `Reading ${file.name}`)
+          progress(task, baseProgress, `Reading ${file.name}`)
           let metadata
           let previewUrl: string
           try {
             metadata = await readVideoMetadata(file)
             previewUrl = URL.createObjectURL(file)
           } catch {
-            progress('Importing animation', index / videos.length + 0.02, 'Loading the offline decoder')
+            progress(task, baseProgress + fileShare * 0.02, 'Loading the offline decoder')
             metadata = await offlineFFmpeg.probe(file)
             const preview = await offlineFFmpeg.createPreview(
               file,
               controller.signal,
-              (value, detail) => progress('Preparing compatible preview', value, detail),
+              (value, detail) => progress(task, baseProgress + value * fileShare * 0.08, detail),
             )
             previewUrl = URL.createObjectURL(preview)
           }
-          addProject(createProject(file, previewUrl, metadata, preferences))
-          progress('Importing animation', (index + 1) / videos.length, `Added ${file.name}`)
+          if (metadata.estimatedFrames > 1_500) {
+            toast('info', 'Large frame gallery', `${file.name} contains about ${metadata.estimatedFrames} frames. Building every preview may take a while.`)
+          }
+          const project = createProject(file, previewUrl, metadata, preferences)
+          project.extraction = {
+            ...project.extraction,
+            mode: 'range',
+            interval: 1,
+            fpsOverride: null,
+          }
+          currentProjectId = project.id
+          addProject(project)
+          updateProject(project.id, { status: 'processing', error: undefined })
+          const frames = await decodeFrames(
+            project,
+            controller.signal,
+            (value, detail) => progress(
+              task,
+              baseProgress + fileShare * (0.08 + value * 0.92),
+              `${file.name} · ${detail}`,
+            ),
+          )
+          updateFrames(project.id, frames, false)
+          updateProject(project.id, { status: 'ready' })
+          currentProjectId = undefined
+          setFrameIndex(0)
+          setView('frames')
         }
-        toast('success', videos.length === 1 ? 'Animation imported' : `${videos.length} animations imported`, 'Ready for frame extraction.')
+        toast(
+          'success',
+          videos.length === 1 ? 'Frame gallery ready' : `${videos.length} frame galleries ready`,
+          'Cherry-pick frames and watch the live selection preview update.',
+        )
       } catch (error) {
-        if ((error as Error).name !== 'AbortError') toast('error', 'Could not import video', (error as Error).message)
+        if (currentProjectId) {
+          updateProject(currentProjectId, {
+            status: (error as Error).name === 'AbortError' ? 'ready' : 'error',
+            error: (error as Error).name === 'AbortError' ? undefined : (error as Error).message,
+          })
+        }
+        if ((error as Error).name !== 'AbortError') toast('error', 'Could not build frame gallery', (error as Error).message)
       } finally {
         finish()
         if (inputRef.current) inputRef.current.value = ''
       }
     },
-    [addProject, begin, finish, preferences, progress, toast],
+    [addProject, begin, decodeFrames, finish, preferences, progress, toast, updateFrames, updateProject],
   )
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setFrameIndex(0)
-      setView('source')
+      setView(activeId ? 'frames' : 'source')
     }, 0)
     return () => clearTimeout(timer)
   }, [activeId])
@@ -142,32 +213,16 @@ function AppContent() {
     const controller = begin(task)
     updateProject(project.id, { status: 'processing', error: undefined })
     try {
-      const onProgress = (value: number, detail: string) => progress(task, value, detail)
-      let frames
-      try {
-        frames = await extractFramesNative(
-          project.file,
-          project.metadata,
-          project.extraction,
-          controller.signal,
-          onProgress,
-        )
-      } catch (error) {
-        if ((error as Error).name === 'AbortError') throw error
-        onProgress(0.03, 'Switching to the offline FFmpeg decoder…')
-        frames = await offlineFFmpeg.extract(
-          project.file,
-          project.metadata,
-          project.extraction,
-          controller.signal,
-          onProgress,
-        )
-      }
+      const frames = await decodeFrames(
+        project,
+        controller.signal,
+        (value, detail) => progress(task, value, detail),
+      )
       updateFrames(project.id, frames)
       updateProject(project.id, { status: 'ready' })
       setFrameIndex(0)
-      setView(project.chroma.enabled ? 'key' : 'source')
-      toast('success', `${frames.length} frames extracted`, 'The sequence is ready to clean and arrange.')
+      setView('frames')
+      toast('success', `${frames.length} frames ready`, 'Cherry-pick the sequence in the frame gallery.')
     } catch (error) {
       if ((error as Error).name !== 'AbortError') {
         updateProject(project.id, { status: 'error', error: (error as Error).message })
@@ -178,19 +233,20 @@ function AppContent() {
     } finally {
       finish()
     }
-  }, [activeProject, begin, finish, progress, toast, updateFrames, updateProject])
+  }, [activeProject, begin, decodeFrames, finish, progress, toast, updateFrames, updateProject])
 
   const buildSheet = useCallback(
     async (project: VideoProject, task = `Generating ${project.name}`): Promise<SpriteSheetResult> => {
+      const chosenFrames = project.frames.filter((frame) => frame.included !== false)
+      if (!chosenFrames.length) throw new Error('Choose at least one frame before generating a sprite sheet.')
       const controller = begin(task)
       const result = await composeSpriteSheet(
-        project.frames,
+        chosenFrames,
         project.chroma,
         project.sheet,
         controller.signal,
         (value, detail) => progress(task, value, detail),
       )
-      if (project.sheetResult) URL.revokeObjectURL(project.sheetResult.url)
       updateProject(project.id, { sheetResult: result })
       return result
     },
@@ -231,19 +287,24 @@ function AppContent() {
   const exportFrames = useCallback(async () => {
     if (!activeProject) return
     const project = activeProject
+    const chosenFrames = project.frames.filter((frame) => frame.included !== false)
+    if (!chosenFrames.length) {
+      toast('info', 'No frames chosen', 'Choose at least one frame in the gallery before exporting.')
+      return
+    }
     const task = `Exporting ${project.name} frames`
     const controller = begin(task)
     try {
       const zip = new JSZip()
-      for (let index = 0; index < project.frames.length; index += 1) {
+      for (let index = 0; index < chosenFrames.length; index += 1) {
         if (controller.signal.aborted) throw new DOMException('Canceled', 'AbortError')
-        const frame = project.frames[index]
+        const frame = chosenFrames[index]
         zip.file(`${frame.name}.png`, await processChromaBlob(frame.blob, project.chroma))
-        progress(task, (index + 1) / project.frames.length * 0.8, `Processing frame ${index + 1}`)
+        progress(task, (index + 1) / chosenFrames.length * 0.8, `Processing frame ${index + 1}`)
       }
       const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' })
       downloadBlob(blob, `${project.name}-frames.zip`)
-      toast('success', 'Frame sequence exported', `${project.frames.length} transparent PNG files`)
+      toast('success', 'Frame sequence exported', `${chosenFrames.length} chosen PNG frames`)
     } catch (error) {
       if ((error as Error).name !== 'AbortError') toast('error', 'Export failed', (error as Error).message)
     } finally {
@@ -278,21 +339,19 @@ function AppContent() {
 
   useEffect(() => {
     const keyboard = (event: KeyboardEvent) => {
-      const editing = ['INPUT', 'SELECT', 'TEXTAREA'].includes((event.target as HTMLElement)?.tagName)
-      if (event.code === 'Space' && !editing) {
+      const target = event.target as HTMLElement
+      const typing = target?.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(target?.tagName)
+      const activatingControl = ['BUTTON', 'A'].includes(target?.tagName)
+      if (event.code === 'Space' && !typing && !activatingControl) {
         event.preventDefault()
         window.dispatchEvent(new Event('spriteforge:toggle-play'))
       }
-      if (!activeProject || editing) return
-      if (event.key === 'ArrowLeft') setFrameIndex((value) => Math.max(0, value - 1))
-      if (event.key === 'ArrowRight') setFrameIndex((value) => Math.max(0, Math.min(activeProject.frames.length - 1, value + 1)))
-      if (event.key === 'Delete') {
-        const hasSelected = activeProject.frames.some((frame) => frame.selected)
-        updateFrames(activeProject.id, activeProject.frames.filter((frame, index) => hasSelected ? !frame.selected : index !== frameIndex))
-      }
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
+      if (!activeProject || typing) return
+      if (!activatingControl && event.key === 'ArrowLeft') setFrameIndex((value) => Math.max(0, value - 1))
+      if (!activatingControl && event.key === 'ArrowRight') setFrameIndex((value) => Math.max(0, Math.min(activeProject.frames.length - 1, value + 1)))
+      if ((event.ctrlKey || event.metaKey) && ['z', 'y', 's'].includes(event.key.toLowerCase()) && processing.active) {
         event.preventDefault()
-        updateFrames(activeProject.id, activeProject.frames.map((frame) => ({ ...frame, selected: true })))
+        return
       }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); undo() }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') { event.preventDefault(); redo() }
@@ -300,7 +359,7 @@ function AppContent() {
     }
     window.addEventListener('keydown', keyboard)
     return () => window.removeEventListener('keydown', keyboard)
-  }, [activeProject, exportZip, frameIndex, redo, undo, updateFrames])
+  }, [activeProject, exportZip, processing.active, redo, undo])
 
   const openImport = () => inputRef.current?.click()
   const openSample = async () => {
@@ -328,6 +387,43 @@ function AppContent() {
               view={view}
               setView={setView}
               onColorPick={(color) => updateProject(activeProject.id, { chroma: { ...activeProject.chroma, color }, sheetResult: undefined })}
+              onToggleFrame={(index) => {
+                if (processing.active) return
+                updateFrames(
+                  activeProject.id,
+                  activeProject.frames.map((frame, position) =>
+                    position === index ? { ...frame, included: frame.included === false } : frame,
+                  ),
+                )
+              }}
+              onSetFrameRange={(start, end, included) => {
+                if (processing.active) return
+                const lower = Math.min(start, end)
+                const upper = Math.max(start, end)
+                const frames = activeProject.frames.map((frame, index) =>
+                  index >= lower && index <= upper ? { ...frame, included } : frame,
+                )
+                if (frames.some((frame, index) => frame.included !== activeProject.frames[index].included)) {
+                  updateFrames(activeProject.id, frames)
+                }
+              }}
+              onSetFrameInclusion={(mode) => {
+                if (processing.active) return
+                const frames = activeProject.frames.map((frame) => ({
+                  ...frame,
+                  included: mode === 'all' ? true : mode === 'none' ? false : frame.included === false,
+                }))
+                if (frames.some((frame, index) => frame.included !== activeProject.frames[index].included)) {
+                  updateFrames(activeProject.id, frames)
+                }
+              }}
+              onAnimationFpsChange={(fps) => {
+                if (processing.active) return
+                const animation = { ...activeProject.animation, fps }
+                updateProject(activeProject.id, { animation })
+                updatePreferences({ lastAnimation: animation })
+              }}
+              disabled={processing.active}
             />
             <Inspector
               onExtract={() => void extract()}
@@ -341,7 +437,7 @@ function AppContent() {
           </>
         ) : (
           <>
-            <EmptyWorkspace onFiles={(files) => void importFiles(files)} onSample={() => void openSample()} />
+            <EmptyWorkspace disabled={processing.active} onFiles={(files) => void importFiles(files)} onSample={() => void openSample()} />
             <Inspector
               onExtract={() => undefined}
               onGenerate={() => undefined}

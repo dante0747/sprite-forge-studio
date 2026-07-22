@@ -74,6 +74,7 @@ export function Segmented<T extends string>({
         <button
           key={option.value}
           className={value === option.value ? 'is-active' : ''}
+          aria-pressed={value === option.value}
           onClick={() => onChange(option.value)}
           type="button"
         >

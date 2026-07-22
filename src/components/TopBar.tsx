@@ -1,9 +1,7 @@
 import {
-  CircleHelp,
   Download,
   FilePlus2,
   Redo2,
-  Settings,
   Sparkles,
   Undo2,
 } from 'lucide-react'
@@ -11,7 +9,8 @@ import { useEditor } from '../context/EditorContext'
 import { Button, IconButton } from './ui/Controls'
 
 export function TopBar({ onImport, onExport }: { onImport: () => void; onExport: () => void }) {
-  const { activeProject, processing, undo, redo } = useEditor()
+  const { activeProject, processing, canUndo, canRedo, undo, redo } = useEditor()
+  const chosenCount = activeProject?.frames.filter((frame) => frame.included !== false).length ?? 0
   return (
     <header className="topbar">
       <div className="brand">
@@ -25,30 +24,24 @@ export function TopBar({ onImport, onExport }: { onImport: () => void; onExport:
       </div>
       <div className="topbar__divider" />
       <div className="document-title">
-        <span className={activeProject ? 'status-dot status-dot--ready' : 'status-dot'} />
+        <span className={`status-dot ${activeProject ? `status-dot--${activeProject.status}` : ''}`} />
         <strong>{activeProject?.name ?? 'Untitled workspace'}</strong>
-        {activeProject && <span>· {activeProject.frames.length} frames</span>}
+        {activeProject?.frames.length ? <span>· {chosenCount} of {activeProject.frames.length} chosen</span> : null}
       </div>
       <div className="topbar__actions">
-        <IconButton label="Undo (Ctrl+Z)" onClick={undo} disabled={!activeProject}>
+        <IconButton label="Undo (Ctrl+Z)" onClick={undo} disabled={!canUndo || processing.active}>
           <Undo2 size={17} />
         </IconButton>
-        <IconButton label="Redo (Ctrl+Y)" onClick={redo} disabled={!activeProject}>
+        <IconButton label="Redo (Ctrl+Y)" onClick={redo} disabled={!canRedo || processing.active}>
           <Redo2 size={17} />
         </IconButton>
         <span className="topbar__separator" />
         <Button variant="ghost" onClick={onImport} disabled={processing.active}>
           <FilePlus2 size={16} /> Import
         </Button>
-        <Button variant="primary" onClick={onExport} disabled={!activeProject?.frames.length || processing.active}>
+        <Button variant="primary" onClick={onExport} disabled={!chosenCount || processing.active}>
           <Download size={16} /> Export
         </Button>
-        <IconButton label="Settings">
-          <Settings size={17} />
-        </IconButton>
-        <IconButton label="Help">
-          <CircleHelp size={17} />
-        </IconButton>
       </div>
     </header>
   )

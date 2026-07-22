@@ -30,6 +30,8 @@ interface EditorContextValue {
   activeId?: string
   processing: ProcessingState
   preferences: UserPreferences
+  canUndo: boolean
+  canRedo: boolean
   addProject: (project: VideoProject) => void
   removeProject: (id: string) => void
   setActiveId: (id: string) => void
@@ -47,6 +49,9 @@ export function EditorProvider({ children }: PropsWithChildren) {
   const [projects, setProjects] = useState<VideoProject[]>([])
   const [activeId, setActiveIdState] = useState<string>()
   const [processing, setProcessing] = useState<ProcessingState>(emptyProcessing)
+  const [historyAvailability, setHistoryAvailability] = useState(
+    new Map<string, { canUndo: boolean; canRedo: boolean }>(),
+  )
   const [preferences, setPreferences] = useState<UserPreferences>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('spriteforge:prefs') ?? '{}') as Partial<UserPreferences>
@@ -72,6 +77,7 @@ export function EditorProvider({ children }: PropsWithChildren) {
     setProjects((current) => [...current, project])
     setActiveIdState(project.id)
     history.current.set(project.id, { past: [], future: [] })
+    setHistoryAvailability((current) => new Map(current).set(project.id, { canUndo: false, canRedo: false }))
   }, [])
 
   const removeProject = useCallback((id: string) => {
@@ -87,11 +93,26 @@ export function EditorProvider({ children }: PropsWithChildren) {
       return next
     })
     history.current.delete(id)
+    setHistoryAvailability((current) => {
+      const next = new Map(current)
+      next.delete(id)
+      return next
+    })
   }, [])
 
   const updateProject = useCallback((id: string, update: Partial<VideoProject>) => {
     setProjects((current) =>
-      current.map((project) => (project.id === id ? { ...project, ...update } : project)),
+      current.map((project) => {
+        if (project.id !== id) return project
+        if (
+          Object.prototype.hasOwnProperty.call(update, 'sheetResult') &&
+          project.sheetResult &&
+          project.sheetResult !== update.sheetResult
+        ) {
+          URL.revokeObjectURL(project.sheetResult.url)
+        }
+        return { ...project, ...update }
+      }),
     )
   }, [])
 
@@ -105,14 +126,25 @@ export function EditorProvider({ children }: PropsWithChildren) {
           item.future = []
           history.current.set(id, item)
         }
+        if (project.sheetResult) URL.revokeObjectURL(project.sheetResult.url)
         return { ...project, frames, sheetResult: undefined }
       }),
     )
+    if (record) {
+      setHistoryAvailability((current) => new Map(current).set(id, { canUndo: true, canRedo: false }))
+    }
   }, [])
 
   const travel = useCallback(
     (direction: 'undo' | 'redo') => {
       if (!activeId) return
+      const item = history.current.get(activeId)
+      const source = direction === 'undo' ? item?.past : item?.future
+      if (!item || !source?.length) return
+      setHistoryAvailability((current) => new Map(current).set(activeId, {
+        canUndo: direction === 'undo' ? source.length > 1 : true,
+        canRedo: direction === 'redo' ? source.length > 1 : true,
+      }))
       setProjects((current) =>
         current.map((project) => {
           if (project.id !== activeId) return project
@@ -124,6 +156,7 @@ export function EditorProvider({ children }: PropsWithChildren) {
           source.pop()
           destination.push(project.frames)
           history.current.set(activeId, item)
+          if (project.sheetResult) URL.revokeObjectURL(project.sheetResult.url)
           return { ...project, frames: next, sheetResult: undefined }
         }),
       )
@@ -142,6 +175,8 @@ export function EditorProvider({ children }: PropsWithChildren) {
       activeProject: projects.find((project) => project.id === activeId),
       processing,
       preferences,
+      canUndo: Boolean(activeId && historyAvailability.get(activeId)?.canUndo),
+      canRedo: Boolean(activeId && historyAvailability.get(activeId)?.canRedo),
       addProject,
       removeProject,
       setActiveId: setActiveIdState,
@@ -157,6 +192,7 @@ export function EditorProvider({ children }: PropsWithChildren) {
       activeId,
       processing,
       preferences,
+      historyAvailability,
       addProject,
       removeProject,
       updateProject,

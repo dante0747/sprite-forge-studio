@@ -13,12 +13,15 @@ export interface VideoMetadata {
 }
 
 export interface ExtractionSettings {
-  startFrame: number
-  endFrame: number
   mode: 'range' | 'exact'
   exactFrames: number
   interval: number
   fpsOverride: number | null
+}
+
+export interface TrimSettings {
+  startTime: number
+  endTime: number
 }
 
 export interface ChromaSettings {
@@ -37,6 +40,7 @@ export interface SheetSettings {
   rows: number
   columns: number
   padding: number
+  spacing: number
   margin: number
   background: 'transparent' | 'black' | 'white' | 'custom'
   customColor: string
@@ -62,6 +66,8 @@ export interface FrameItem {
   url: string
   width: number
   height: number
+  sourceTime: number
+  included: boolean
   selected: boolean
 }
 
@@ -86,6 +92,7 @@ export interface VideoProject {
   status: ProjectStatus
   error?: string
   frames: FrameItem[]
+  trim: TrimSettings
   extraction: ExtractionSettings
   chroma: ChromaSettings
   sheet: SheetSettings

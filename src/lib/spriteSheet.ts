@@ -101,13 +101,16 @@ export async function composeSpriteSheet(
       await new Promise((resolve) => setTimeout(resolve, 0))
     }
 
+    const framePadding = Math.max(0, settings.padding)
+    const frameSpacing = Math.max(0, settings.spacing)
+    const sheetMargin = Math.max(0, settings.margin)
     const baseCellWidth =
       settings.cellMode === 'manual'
-        ? settings.cellWidth
+        ? Math.max(1, settings.cellWidth)
         : Math.max(...prepared.map((frame) => frame.width))
     const baseCellHeight =
       settings.cellMode === 'manual'
-        ? settings.cellHeight
+        ? Math.max(1, settings.cellHeight)
         : Math.max(...prepared.map((frame) => frame.height))
     const columns =
       settings.layout === 'manual'
@@ -129,9 +132,13 @@ export async function composeSpriteSheet(
         : baseCellHeight,
     )
     const contentWidth =
-      settings.margin * 2 + columnWidths.reduce((total, value) => total + value + settings.padding * 2, 0)
+      sheetMargin * 2 +
+      columnWidths.reduce((total, value) => total + value + framePadding * 2, 0) +
+      frameSpacing * Math.max(0, columns - 1)
     const contentHeight =
-      settings.margin * 2 + rowHeights.reduce((total, value) => total + value + settings.padding * 2, 0)
+      sheetMargin * 2 +
+      rowHeights.reduce((total, value) => total + value + framePadding * 2, 0) +
+      frameSpacing * Math.max(0, rows - 1)
     const width = settings.powerOfTwo || contentWidth
     const height = settings.powerOfTwo || contentHeight
     const contentScale = settings.powerOfTwo
@@ -179,18 +186,30 @@ export async function composeSpriteSheet(
       const frame = prepared[index]
       const column = index % columns
       const row = Math.floor(index / columns)
-      const rawCellX =
-        settings.margin +
-        columnWidths.slice(0, column).reduce((total, value) => total + value + settings.padding * 2, 0) +
-        settings.padding
-      const rawCellY =
-        settings.margin +
-        rowHeights.slice(0, row).reduce((total, value) => total + value + settings.padding * 2, 0) +
-        settings.padding
-      const cellX = Math.round(contentOffsetX + rawCellX * contentScale)
-      const cellY = Math.round(contentOffsetY + rawCellY * contentScale)
-      const cellWidth = Math.max(1, Math.floor(columnWidths[column] * contentScale))
-      const cellHeight = Math.max(1, Math.floor(rowHeights[row] * contentScale))
+      const rawRegionX =
+        sheetMargin +
+        columnWidths.slice(0, column).reduce((total, value) => total + value + framePadding * 2, 0) +
+        frameSpacing * column
+      const rawRegionY =
+        sheetMargin +
+        rowHeights.slice(0, row).reduce((total, value) => total + value + framePadding * 2, 0) +
+        frameSpacing * row
+      const rawRegionWidth = columnWidths[column] + framePadding * 2
+      const rawRegionHeight = rowHeights[row] + framePadding * 2
+      const regionX = Math.round(contentOffsetX + rawRegionX * contentScale)
+      const regionY = Math.round(contentOffsetY + rawRegionY * contentScale)
+      const regionRight = Math.round(contentOffsetX + (rawRegionX + rawRegionWidth) * contentScale)
+      const regionBottom = Math.round(contentOffsetY + (rawRegionY + rawRegionHeight) * contentScale)
+      const cellX = Math.round(contentOffsetX + (rawRegionX + framePadding) * contentScale)
+      const cellY = Math.round(contentOffsetY + (rawRegionY + framePadding) * contentScale)
+      const cellRight = Math.round(
+        contentOffsetX + (rawRegionX + framePadding + columnWidths[column]) * contentScale,
+      )
+      const cellBottom = Math.round(
+        contentOffsetY + (rawRegionY + framePadding + rowHeights[row]) * contentScale,
+      )
+      const cellWidth = Math.max(1, cellRight - cellX)
+      const cellHeight = Math.max(1, cellBottom - cellY)
       const frameScale = Math.min(1, cellWidth / frame.width, cellHeight / frame.height)
       const drawWidth = Math.max(1, Math.round(frame.width * frameScale))
       const drawHeight = Math.max(1, Math.round(frame.height * frameScale))
@@ -214,10 +233,10 @@ export async function composeSpriteSheet(
       )
       resultFrames.push({
         name: frame.frame.name,
-        x: cellX,
-        y: cellY,
-        width: cellWidth,
-        height: cellHeight,
+        x: regionX,
+        y: regionY,
+        width: Math.max(1, regionRight - regionX),
+        height: Math.max(1, regionBottom - regionY),
       })
       onProgress(0.5 + (index + 1) / frames.length / 2, `Packing frame ${index + 1} of ${frames.length}`)
     }

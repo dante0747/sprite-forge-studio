@@ -1,4 +1,4 @@
-import type { ExtractionSettings, FrameItem, VideoMetadata } from '../types/editor'
+import type { ExtractionSettings, FrameItem, TrimSettings, VideoMetadata } from '../types/editor'
 
 const ACCEPTED_EXTENSIONS = ['mp4', 'mov', 'avi', 'webm', 'mkv']
 
@@ -99,11 +99,38 @@ function canvasToBlob(canvas: HTMLCanvasElement) {
   )
 }
 
-function chooseFrameIndices(settings: ExtractionSettings, metadata: VideoMetadata) {
-  const start = Math.max(0, Math.min(settings.startFrame, metadata.estimatedFrames - 1))
-  const end = Math.max(start, Math.min(settings.endFrame, metadata.estimatedFrames - 1))
+function getTrimFrameBounds(trim: TrimSettings, metadata: VideoMetadata) {
+  const fps = Math.max(0.001, metadata.fps)
+  const lastFrame = Math.max(0, metadata.estimatedFrames - 1)
+  const start = Math.max(0, Math.min(Math.ceil(trim.startTime * fps - 0.000001), lastFrame))
+  const endExclusive = Math.max(
+    start + 1,
+    Math.min(Math.ceil(trim.endTime * fps - 0.000001), metadata.estimatedFrames),
+  )
+  return { start, end: endExclusive - 1 }
+}
+
+export function getTrimmedSourceFrameCount(trim: TrimSettings, metadata: VideoMetadata) {
+  const { start, end } = getTrimFrameBounds(trim, metadata)
+  return end - start + 1
+}
+
+export function estimateExtractionCount(
+  trim: TrimSettings,
+  settings: ExtractionSettings,
+  metadata: VideoMetadata,
+) {
+  return chooseFrameIndices(settings, metadata, trim).length
+}
+
+function chooseFrameIndices(
+  settings: ExtractionSettings,
+  metadata: VideoMetadata,
+  trim: TrimSettings,
+) {
+  const { start, end } = getTrimFrameBounds(trim, metadata)
   if (settings.mode === 'exact') {
-    const count = Math.max(1, settings.exactFrames)
+    const count = Math.min(end - start + 1, Math.max(1, settings.exactFrames))
     return Array.from({ length: count }, (_, index) => {
       const position = count === 1 ? 0 : index / (count - 1)
       return Math.round(start + (end - start) * position)
@@ -125,6 +152,7 @@ function chooseFrameIndices(settings: ExtractionSettings, metadata: VideoMetadat
 export async function extractFramesNative(
   file: File,
   metadata: VideoMetadata,
+  trim: TrimSettings,
   settings: ExtractionSettings,
   signal: AbortSignal,
   onProgress: (progress: number, detail: string) => void,
@@ -150,11 +178,12 @@ export async function extractFramesNative(
   canvas.height = video.videoHeight
   const context = canvas.getContext('2d', { alpha: true })
   if (!context) throw new Error('Canvas rendering is not available.')
-  const indices = chooseFrameIndices(settings, metadata)
+  const indices = chooseFrameIndices(settings, metadata, trim)
   const frames: FrameItem[] = []
 
   try {
     video.pause()
+    onProgress(0.03, `Trim applied · ${(trim.endTime - trim.startTime).toFixed(2)}s selected`)
     for (let index = 0; index < indices.length; index += 1) {
       if (signal.aborted) throw new DOMException('Canceled', 'AbortError')
       const sourceFrame = indices[index]
@@ -169,9 +198,11 @@ export async function extractFramesNative(
         url: URL.createObjectURL(blob),
         width: canvas.width,
         height: canvas.height,
+        sourceTime: sourceFrame / metadata.fps,
+        included: true,
         selected: false,
       })
-      onProgress((index + 1) / indices.length, `Frame ${index + 1} of ${indices.length}`)
+      onProgress(0.03 + ((index + 1) / indices.length) * 0.97, `Frame ${index + 1} of ${indices.length}`)
       await new Promise((resolve) => setTimeout(resolve, 0))
     }
     return frames

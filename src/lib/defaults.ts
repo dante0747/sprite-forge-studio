@@ -3,18 +3,22 @@ import type {
   ChromaSettings,
   ExtractionSettings,
   SheetSettings,
+  TrimSettings,
   UserPreferences,
   VideoMetadata,
   VideoProject,
 } from '../types/editor'
 
 export const defaultExtraction = (metadata: VideoMetadata): ExtractionSettings => ({
-  startFrame: 0,
-  endFrame: Math.max(0, metadata.estimatedFrames - 1),
   mode: 'range',
   exactFrames: Math.min(30, Math.max(1, metadata.estimatedFrames)),
   interval: 1,
   fpsOverride: null,
+})
+
+export const defaultTrim = (metadata: VideoMetadata): TrimSettings => ({
+  startTime: 0,
+  endTime: metadata.duration,
 })
 
 export const defaultChroma: ChromaSettings = {
@@ -33,6 +37,7 @@ export const defaultSheet: SheetSettings = {
   rows: 4,
   columns: 8,
   padding: 2,
+  spacing: 2,
   margin: 4,
   background: 'transparent',
   customColor: '#111827',
@@ -75,6 +80,7 @@ export function createProject(
     metadata,
     status: 'ready',
     frames: [],
+    trim: defaultTrim(metadata),
     extraction: { ...defaultExtraction(metadata), ...preferences.lastSampling },
     chroma: { ...defaultChroma, ...preferences.lastChroma },
     sheet: { ...defaultSheet, ...preferences.lastSheet },

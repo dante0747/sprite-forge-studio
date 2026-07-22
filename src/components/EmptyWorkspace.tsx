@@ -2,22 +2,24 @@ import { FileVideo2, LockKeyhole, MousePointer2, ShieldCheck } from 'lucide-reac
 import { useCallback, useState } from 'react'
 import { Button } from './ui/Controls'
 
-export function EmptyWorkspace({ onFiles, onSample }: { onFiles: (files: File[]) => void; onSample: () => void }) {
+export function EmptyWorkspace({ onFiles, onSample, disabled = false }: { onFiles: (files: File[]) => void; onSample: () => void; disabled?: boolean }) {
   const [dragging, setDragging] = useState(false)
   const drop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault()
       setDragging(false)
+      if (disabled) return
       onFiles(Array.from(event.dataTransfer.files))
     },
-    [onFiles],
+    [disabled, onFiles],
   )
   return (
     <main className="empty-workspace">
       <div
-        className={`drop-stage ${dragging ? 'is-dragging' : ''}`}
+        className={`drop-stage ${dragging ? 'is-dragging' : ''} ${disabled ? 'is-disabled' : ''}`}
         onDragEnter={(event) => {
           event.preventDefault()
+          if (disabled) return
           setDragging(true)
         }}
         onDragOver={(event) => event.preventDefault()}
@@ -41,14 +43,15 @@ export function EmptyWorkspace({ onFiles, onSample }: { onFiles: (files: File[])
           <input
             type="file"
             multiple
+            disabled={disabled}
             accept="video/mp4,video/quicktime,video/x-msvideo,video/webm,.mkv"
             onChange={(event) => onFiles(Array.from(event.target.files ?? []))}
           />
-          <Button variant="primary" type="button" tabIndex={-1}>
+          <Button variant="primary" type="button" tabIndex={-1} disabled={disabled}>
             <FileVideo2 size={17} /> Choose videos
           </Button>
         </label>
-        <button className="sample-trigger" type="button" onClick={onSample}>or open the included chroma-key sample</button>
+        <button className="sample-trigger" type="button" onClick={onSample} disabled={disabled}>or open the included chroma-key sample</button>
         <span className="drop-stage__formats">MP4 · MOV · AVI · WEBM · MKV</span>
         <div className="privacy-pill">
           <ShieldCheck size={14} />

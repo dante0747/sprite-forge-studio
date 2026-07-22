@@ -1,7 +1,7 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg'
 import { fetchFile } from '@ffmpeg/util'
-import type { ExtractionSettings, FrameItem, VideoMetadata } from '../types/editor'
-import { blobDimensions } from './media'
+import type { ExtractionSettings, FrameItem, TrimSettings, VideoMetadata } from '../types/editor'
+import { blobDimensions, getTrimmedSourceFrameCount } from './media'
 
 class OfflineFFmpeg {
   private ffmpeg = new FFmpeg()
@@ -109,6 +109,7 @@ class OfflineFFmpeg {
   async extract(
     file: File,
     metadata: VideoMetadata,
+    trim: TrimSettings,
     settings: ExtractionSettings,
     signal: AbortSignal,
     onProgress: (progress: number, detail: string) => void,
@@ -118,17 +119,22 @@ class OfflineFFmpeg {
     const extension = file.name.split('.').pop() ?? 'video'
     const input = `input-${token}.${extension}`
     const output = `frame-${token}-%05d.png`
-    const start = Math.max(0, settings.startFrame) / metadata.fps
-    const end = Math.min(settings.endFrame, metadata.estimatedFrames - 1) / metadata.fps
-    const duration = Math.max(1 / metadata.fps, end - start + 1 / metadata.fps)
+    const frameDuration = 1 / Math.max(1, metadata.fps)
+    const start = Math.max(0, Math.min(trim.startTime, Math.max(0, metadata.duration - frameDuration)))
+    const end = Math.min(metadata.duration, Math.max(start + frameDuration, trim.endTime))
+    const duration = Math.max(1 / metadata.fps, end - start)
+    const exactFrames = Math.min(
+      getTrimmedSourceFrameCount(trim, metadata),
+      Math.max(1, settings.exactFrames),
+    )
     const filters: string[] = []
-    if (settings.mode === 'exact') filters.push(`fps=${settings.exactFrames / duration}`)
+    if (settings.mode === 'exact') filters.push(`fps=${exactFrames / duration}`)
     else if (settings.fpsOverride) filters.push(`fps=${settings.fpsOverride}`)
     else if (settings.interval > 1) filters.push(`select='not(mod(n,${settings.interval}))'`, 'setpts=N/FRAME_RATE/TB')
 
     const args = ['-ss', start.toFixed(6), '-i', input, '-t', duration.toFixed(6)]
     if (filters.length) args.push('-vf', filters.join(','))
-    if (settings.mode === 'exact') args.push('-frames:v', String(settings.exactFrames))
+    if (settings.mode === 'exact') args.push('-frames:v', String(exactFrames))
     args.push('-vsync', '0', output)
 
     const onFfmpegProgress = ({ progress }: { progress: number }) =>
@@ -137,6 +143,7 @@ class OfflineFFmpeg {
     signal.addEventListener('abort', onAbort, { once: true })
     this.ffmpeg.on('progress', onFfmpegProgress)
     try {
+      onProgress(0.03, `Applying trim · ${duration.toFixed(2)}s selected`)
       await this.ffmpeg.writeFile(input, await fetchFile(file))
       await this.ffmpeg.exec(args)
       const entries = (await this.ffmpeg.listDir('/'))
@@ -148,12 +155,19 @@ class OfflineFFmpeg {
         const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : new Uint8Array(data)
         const blob = new Blob([bytes], { type: 'image/png' })
         const dimensions = await blobDimensions(blob)
+        const sourceTime = settings.mode === 'exact'
+          ? start + (entries.length === 1 ? 0 : (index / (entries.length - 1)) * Math.max(0, duration - frameDuration))
+          : settings.fpsOverride
+            ? start + index / settings.fpsOverride
+            : start + (index * Math.max(1, settings.interval)) / metadata.fps
         frames.push({
           id: crypto.randomUUID(),
           name: `frame_${(index + 1).toString().padStart(4, '0')}`,
           blob,
           url: URL.createObjectURL(blob),
           ...dimensions,
+          sourceTime,
+          included: true,
           selected: false,
         })
         await this.ffmpeg.deleteFile(entries[index].name)
