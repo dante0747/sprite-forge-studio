@@ -85,6 +85,8 @@ export function Inspector({
     updateProject(project.id, { sheet, sheetResult: undefined })
     updatePreferences({ lastSheet: sheet })
   }
+  const exactPixels = (value: number, max = 512) =>
+    Math.min(max, Math.max(0, Math.round(Number.isFinite(value) ? value : 0)))
   const updateAnimation = (update: Partial<typeof project.animation>) => {
     const animation = { ...project.animation, ...update }
     updateProject(project.id, { animation })
@@ -310,17 +312,17 @@ export function Inspector({
               <Segmented value={project.sheet.layout} options={[{ value: 'automatic', label: 'Automatic' }, { value: 'manual', label: 'Manual' }]} onChange={(layout) => updateSheet({ layout })} />
               {project.sheet.layout === 'manual' && (
                 <div className="field-grid">
-                  <Field label="Columns"><NumberInput min={1} max={128} value={project.sheet.columns} onChange={(e) => updateSheet({ columns: Number(e.target.value) })} /></Field>
-                  <Field label="Rows"><NumberInput min={1} max={128} value={project.sheet.rows} onChange={(e) => updateSheet({ rows: Number(e.target.value) })} /></Field>
+                  <Field label="Columns"><NumberInput min={1} max={128} step={1} value={project.sheet.columns} onChange={(e) => updateSheet({ columns: Math.max(1, exactPixels(Number(e.target.value), 128)) })} /></Field>
+                  <Field label="Rows"><NumberInput min={1} max={128} step={1} value={project.sheet.rows} onChange={(e) => updateSheet({ rows: Math.max(1, exactPixels(Number(e.target.value), 128)) })} /></Field>
                 </div>
               )}
             </Section>
-            <Section title="Cell size">
+            <Section title="Sprite area size">
               <Segmented value={project.sheet.cellMode} options={[{ value: 'automatic', label: 'Automatic' }, { value: 'manual', label: 'Manual' }]} onChange={(cellMode) => updateSheet({ cellMode })} />
               {project.sheet.cellMode === 'manual' && (
                 <div className="field-grid">
-                  <Field label="Width"><NumberInput min={1} max={4096} value={project.sheet.cellWidth} onChange={(e) => updateSheet({ cellWidth: Number(e.target.value) })} /></Field>
-                  <Field label="Height"><NumberInput min={1} max={4096} value={project.sheet.cellHeight} onChange={(e) => updateSheet({ cellHeight: Number(e.target.value) })} /></Field>
+                  <Field label="Sprite width" hint="Before margins"><NumberInput min={1} max={4096} step={1} value={project.sheet.cellWidth} onChange={(e) => updateSheet({ cellWidth: Math.max(1, exactPixels(Number(e.target.value), 4096)) })} /></Field>
+                  <Field label="Sprite height" hint="Before margins"><NumberInput min={1} max={4096} step={1} value={project.sheet.cellHeight} onChange={(e) => updateSheet({ cellHeight: Math.max(1, exactPixels(Number(e.target.value), 4096)) })} /></Field>
                 </div>
               )}
               <Field label="Alignment">
@@ -331,28 +333,58 @@ export function Inspector({
               <Toggle label="Trim transparent pixels" checked={project.sheet.trim} onChange={(trim) => updateSheet({ trim })} />
               <Toggle label="Uniform cell size" checked={project.sheet.uniformCells} onChange={(uniformCells) => updateSheet({ uniformCells })} />
             </Section>
-            <Section title="Padding & spacing">
+            <Section title="Per-frame margins">
+              <div
+                className="frame-margin-editor"
+                style={{
+                  '--frame-margin-top': `${Math.min(18, 4 + project.sheet.frameMarginTop / 4)}px`,
+                  '--frame-margin-right': `${Math.min(18, 4 + project.sheet.frameMarginRight / 4)}px`,
+                  '--frame-margin-bottom': `${Math.min(18, 4 + project.sheet.frameMarginBottom / 4)}px`,
+                  '--frame-margin-left': `${Math.min(18, 4 + project.sheet.frameMarginLeft / 4)}px`,
+                } as React.CSSProperties}
+              >
+                {([
+                  ['top', 'Top', 'frameMarginTop'],
+                  ['right', 'Right', 'frameMarginRight'],
+                  ['bottom', 'Bottom', 'frameMarginBottom'],
+                  ['left', 'Left', 'frameMarginLeft'],
+                ] as const).map(([position, label, key]) => (
+                  <label key={key} className={`frame-margin-input frame-margin-input--${position}`}>
+                    <span>{label}</span>
+                    <span><NumberInput aria-label={`${label} margin for every frame in pixels`} min={0} max={512} step={1} value={project.sheet[key]} onChange={(event) => updateSheet({ [key]: exactPixels(Number(event.target.value)) })} /><b>px</b></span>
+                  </label>
+                ))}
+                <div className="frame-margin-preview" aria-hidden="true">
+                  <div><span>sprite area</span></div>
+                </div>
+              </div>
+              <span className="section-note">These transparent pixels are included inside every exported frame rectangle and appear in the generated animation.</span>
+            </Section>
+            <Section title="Frame separation">
               <div className="field-grid">
-                <Field label="Frame padding" hint="Inside">
-                  <NumberInput min={0} max={128} value={project.sheet.padding} onChange={(e) => updateSheet({ padding: Math.max(0, Number(e.target.value)) })} />
+                <Field label="Between frames" hint="Outside frames">
+                  <NumberInput aria-label="Space between frame rectangles in pixels" min={0} max={512} step={1} value={project.sheet.spacing} onChange={(e) => updateSheet({ spacing: exactPixels(Number(e.target.value)) })} />
                 </Field>
-                <Field label="Frame spacing" hint="Between">
-                  <NumberInput min={0} max={128} value={project.sheet.spacing} onChange={(e) => updateSheet({ spacing: Math.max(0, Number(e.target.value)) })} />
+                <Field label="Sheet edge" hint="Minimum border">
+                  <NumberInput aria-label="Minimum sprite sheet edge margin in pixels" min={0} max={512} step={1} value={project.sheet.margin} onChange={(e) => updateSheet({ margin: exactPixels(Number(e.target.value)) })} />
                 </Field>
               </div>
-              <Field label="Sheet edge margin" hint="Outer border">
-                <NumberInput min={0} max={256} value={project.sheet.margin} onChange={(e) => updateSheet({ margin: Math.max(0, Number(e.target.value)) })} />
-              </Field>
-              <div className="spacing-guide" aria-hidden="true">
-                <span>sheet margin</span><i><b>padding</b></i><em>spacing</em><i><b>padding</b></i>
+              <div
+                className="sheet-spacing-preview"
+                style={{ '--frame-gap': `${Math.min(24, 5 + project.sheet.spacing / 3)}px` } as React.CSSProperties}
+                aria-hidden="true"
+              >
+                <i>frame</i><b>{project.sheet.spacing}px gap</b><i>frame</i>
               </div>
+              <span className="section-note">The gap separates atlas frames but is not part of their animation bounds. Sheet edge adds space only around the complete grid.</span>
             </Section>
             <Section title="Texture">
               <Field label="Power of two">
                 <Select value={project.sheet.powerOfTwo} onChange={(e) => updateSheet({ powerOfTwo: Number(e.target.value) as typeof project.sheet.powerOfTwo })}>
-                  <option value={0}>Off · natural size</option><option value={256}>Fit into 256 × 256</option><option value={512}>Fit into 512 × 512</option><option value={1024}>Fit into 1024 × 1024</option><option value={2048}>Fit into 2048 × 2048</option><option value={4096}>Fit into 4096 × 4096</option>
+                  <option value={0}>Off · natural size</option><option value={256}>Exact 256 × 256</option><option value={512}>Exact 512 × 512</option><option value={1024}>Exact 1024 × 1024</option><option value={2048}>Exact 2048 × 2048</option><option value={4096}>Exact 4096 × 4096</option>
                 </Select>
               </Field>
+              {project.sheet.powerOfTwo !== 0 && <span className="section-note">Exact pixel margins and spacing are never scaled. Choose a larger texture if the layout does not fit.</span>}
               <Field label="Background">
                 <Select value={project.sheet.background} onChange={(e) => updateSheet({ background: e.target.value as typeof project.sheet.background })}>
                   <option value="transparent">Transparent</option><option value="black">Black</option><option value="white">White</option><option value="custom">Custom</option>

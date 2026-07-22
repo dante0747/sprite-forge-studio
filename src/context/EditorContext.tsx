@@ -55,11 +55,27 @@ export function EditorProvider({ children }: PropsWithChildren) {
   const [preferences, setPreferences] = useState<UserPreferences>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('spriteforge:prefs') ?? '{}') as Partial<UserPreferences>
+      const savedSheet = (saved.lastSheet ?? {}) as Partial<UserPreferences['lastSheet']> & { padding?: number }
+      const legacyFrameMargin = Number.isFinite(savedSheet.padding)
+        ? Math.max(0, Math.round(savedSheet.padding!))
+        : undefined
+      const savedSheetSettings = Object.fromEntries(
+        Object.entries(savedSheet).filter(([key]) => key !== 'padding'),
+      ) as Partial<UserPreferences['lastSheet']>
       return {
         ...defaultPreferences,
         ...saved,
         lastChroma: { ...defaultPreferences.lastChroma, ...saved.lastChroma },
-        lastSheet: { ...defaultPreferences.lastSheet, ...saved.lastSheet },
+        lastSheet: {
+          ...defaultPreferences.lastSheet,
+          ...(legacyFrameMargin === undefined ? {} : {
+            frameMarginTop: legacyFrameMargin,
+            frameMarginRight: legacyFrameMargin,
+            frameMarginBottom: legacyFrameMargin,
+            frameMarginLeft: legacyFrameMargin,
+          }),
+          ...savedSheetSettings,
+        },
         lastAnimation: { ...defaultPreferences.lastAnimation, ...saved.lastAnimation },
         lastSampling: { ...defaultPreferences.lastSampling, ...saved.lastSampling },
       }

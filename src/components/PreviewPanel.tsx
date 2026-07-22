@@ -284,7 +284,15 @@ function SheetMonitor({ project }: { project: VideoProject }) {
             <rect key={frame.name} x={frame.x} y={frame.y} width={frame.width} height={frame.height} />
           ))}
         </g>
+        <g className="sheet-content-guides">
+          {project.sheetResult.frames.map((frame) => (
+            <rect key={frame.name} x={frame.contentX} y={frame.contentY} width={frame.contentWidth} height={frame.contentHeight} />
+          ))}
+        </g>
       </svg>
+      <div className="sheet-guide-legend" aria-hidden="true">
+        <span><i /> frame bounds</span><span><i /> sprite area</span>
+      </div>
       <span className="resolution-badge">
         {project.sheetResult.width} × {project.sheetResult.height}
       </span>

@@ -12,7 +12,7 @@ SpriteForge Studio is a browser-based video-to-sprite-sheet editor for 2D game w
 - Browser-native extraction with a locally bundled FFmpeg WebAssembly fallback
 - Non-destructive, worker-powered chroma key with tolerance, softness, feathering, noise cleanup, and spill suppression
 - Multi-select, copy, cut, paste, delete, rename, replace, and drag-to-reorder frame editing
-- Automatic or manual grids with independent frame padding, frame spacing, sheet margins, alignment, transparent trimming, and power-of-two textures
+- Automatic or manual grids with exact top/right/bottom/left margins inside every frame, independent space between frames, sheet-edge margins, alignment, transparent trimming, and power-of-two textures
 - Sprite-sheet and frame-sequence PNG export, plus ZIP packages with JSON, XML, or CSV metadata and Phaser sample code
 - Source and alpha monitors, packed-sheet boundary preview, animation playback decoded directly from the generated sheet, undo/redo, keyboard controls, progress, cancellation, and persisted preferences
 - Entirely client-side processing; no backend or cloud upload
@@ -70,7 +70,7 @@ Do not set `coderator.dev` as a custom domain on this project repository: that w
 3. Optionally trim the source or change the gallery density, then rebuild the gallery.
 4. Sample the background in the Transparency monitor and tune the key.
 5. Copy, cut, paste, remove, rename, replace, or drag groups of frames into order in the timeline.
-6. Configure frame padding, spacing, sheet margin, and layout, then generate the sprite sheet from the chosen sequence.
+6. Configure exact per-side frame margins, inter-frame spacing, sheet-edge margin, and layout, then generate the sprite sheet from the chosen sequence.
 7. Preview animation decoded from the generated sheet and export a PNG, chosen-frame ZIP, or complete package.
 
 ## Keyboard shortcuts

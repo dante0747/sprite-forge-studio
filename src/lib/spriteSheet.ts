@@ -101,24 +101,29 @@ export async function composeSpriteSheet(
       await new Promise((resolve) => setTimeout(resolve, 0))
     }
 
-    const framePadding = Math.max(0, settings.padding)
-    const frameSpacing = Math.max(0, settings.spacing)
-    const sheetMargin = Math.max(0, settings.margin)
+    const frameMarginTop = Math.max(0, Math.round(settings.frameMarginTop))
+    const frameMarginRight = Math.max(0, Math.round(settings.frameMarginRight))
+    const frameMarginBottom = Math.max(0, Math.round(settings.frameMarginBottom))
+    const frameMarginLeft = Math.max(0, Math.round(settings.frameMarginLeft))
+    const frameSpacing = Math.max(0, Math.round(settings.spacing))
+    const sheetMargin = Math.max(0, Math.round(settings.margin))
     const baseCellWidth =
       settings.cellMode === 'manual'
-        ? Math.max(1, settings.cellWidth)
+        ? Math.max(1, Math.round(settings.cellWidth))
         : Math.max(...prepared.map((frame) => frame.width))
     const baseCellHeight =
       settings.cellMode === 'manual'
-        ? Math.max(1, settings.cellHeight)
+        ? Math.max(1, Math.round(settings.cellHeight))
         : Math.max(...prepared.map((frame) => frame.height))
+    const baseRegionWidth = baseCellWidth + frameMarginLeft + frameMarginRight
+    const baseRegionHeight = baseCellHeight + frameMarginTop + frameMarginBottom
     const columns =
       settings.layout === 'manual'
-        ? Math.max(1, settings.columns)
-        : Math.max(1, Math.ceil(Math.sqrt((frames.length * baseCellHeight) / baseCellWidth)))
+        ? Math.max(1, Math.round(settings.columns))
+        : Math.max(1, Math.ceil(Math.sqrt((frames.length * baseRegionHeight) / baseRegionWidth)))
     const rows =
       settings.layout === 'manual'
-        ? Math.max(settings.rows, Math.ceil(frames.length / columns))
+        ? Math.max(Math.round(settings.rows), Math.ceil(frames.length / columns))
         : Math.ceil(frames.length / columns)
     const variableCells = settings.cellMode === 'automatic' && !settings.uniformCells
     const columnWidths = Array.from({ length: columns }, (_, column) =>
@@ -133,25 +138,19 @@ export async function composeSpriteSheet(
     )
     const contentWidth =
       sheetMargin * 2 +
-      columnWidths.reduce((total, value) => total + value + framePadding * 2, 0) +
+      columnWidths.reduce((total, value) => total + value + frameMarginLeft + frameMarginRight, 0) +
       frameSpacing * Math.max(0, columns - 1)
     const contentHeight =
       sheetMargin * 2 +
-      rowHeights.reduce((total, value) => total + value + framePadding * 2, 0) +
+      rowHeights.reduce((total, value) => total + value + frameMarginTop + frameMarginBottom, 0) +
       frameSpacing * Math.max(0, rows - 1)
-    const width = settings.powerOfTwo || contentWidth
-    const height = settings.powerOfTwo || contentHeight
-    const contentScale = settings.powerOfTwo
-      ? Math.min(1, width / contentWidth, height / contentHeight)
-      : 1
-    if (
-      columnWidths.some((cellWidth) => cellWidth * contentScale < 1) ||
-      rowHeights.some((cellHeight) => cellHeight * contentScale < 1)
-    ) {
+    if (settings.powerOfTwo && (contentWidth > settings.powerOfTwo || contentHeight > settings.powerOfTwo)) {
       throw new Error(
-        `The ${settings.powerOfTwo}px texture is too small for a ${columns}×${rows} grid. Choose a larger power-of-two size.`,
+        `The exact ${contentWidth}×${contentHeight}px layout does not fit inside ${settings.powerOfTwo}×${settings.powerOfTwo}px. Choose a larger texture or turn power-of-two off.`,
       )
     }
+    const width = settings.powerOfTwo || contentWidth
+    const height = settings.powerOfTwo || contentHeight
     if (width > 16384 || height > 16384 || width * height > 268_435_456) {
       throw new Error('The generated texture exceeds safe browser canvas limits. Use fewer columns or smaller cells.')
     }
@@ -169,16 +168,8 @@ export async function composeSpriteSheet(
       context.fillRect(0, 0, width, height)
     }
 
-    const scaledContentWidth = contentWidth * contentScale
-    const scaledContentHeight = contentHeight * contentScale
-    const contentOffsetX = settings.powerOfTwo ? (width - scaledContentWidth) / 2 : 0
-    const contentOffsetY = settings.powerOfTwo ? (height - scaledContentHeight) / 2 : 0
-    if (contentScale < 1) {
-      onProgress(
-        0.5,
-        `Fitting ${contentWidth}×${contentHeight}px into ${width}×${height}px · ${Math.round(contentScale * 100)}%`,
-      )
-    }
+    const contentOffsetX = settings.powerOfTwo ? Math.floor((width - contentWidth) / 2) : 0
+    const contentOffsetY = settings.powerOfTwo ? Math.floor((height - contentHeight) / 2) : 0
 
     const resultFrames: SpriteSheetResult['frames'] = []
     for (let index = 0; index < prepared.length; index += 1) {
@@ -188,26 +179,28 @@ export async function composeSpriteSheet(
       const row = Math.floor(index / columns)
       const rawRegionX =
         sheetMargin +
-        columnWidths.slice(0, column).reduce((total, value) => total + value + framePadding * 2, 0) +
+        columnWidths.slice(0, column).reduce(
+          (total, value) => total + value + frameMarginLeft + frameMarginRight,
+          0,
+        ) +
         frameSpacing * column
       const rawRegionY =
         sheetMargin +
-        rowHeights.slice(0, row).reduce((total, value) => total + value + framePadding * 2, 0) +
+        rowHeights.slice(0, row).reduce(
+          (total, value) => total + value + frameMarginTop + frameMarginBottom,
+          0,
+        ) +
         frameSpacing * row
-      const rawRegionWidth = columnWidths[column] + framePadding * 2
-      const rawRegionHeight = rowHeights[row] + framePadding * 2
-      const regionX = Math.round(contentOffsetX + rawRegionX * contentScale)
-      const regionY = Math.round(contentOffsetY + rawRegionY * contentScale)
-      const regionRight = Math.round(contentOffsetX + (rawRegionX + rawRegionWidth) * contentScale)
-      const regionBottom = Math.round(contentOffsetY + (rawRegionY + rawRegionHeight) * contentScale)
-      const cellX = Math.round(contentOffsetX + (rawRegionX + framePadding) * contentScale)
-      const cellY = Math.round(contentOffsetY + (rawRegionY + framePadding) * contentScale)
-      const cellRight = Math.round(
-        contentOffsetX + (rawRegionX + framePadding + columnWidths[column]) * contentScale,
-      )
-      const cellBottom = Math.round(
-        contentOffsetY + (rawRegionY + framePadding + rowHeights[row]) * contentScale,
-      )
+      const rawRegionWidth = columnWidths[column] + frameMarginLeft + frameMarginRight
+      const rawRegionHeight = rowHeights[row] + frameMarginTop + frameMarginBottom
+      const regionX = contentOffsetX + rawRegionX
+      const regionY = contentOffsetY + rawRegionY
+      const regionRight = regionX + rawRegionWidth
+      const regionBottom = regionY + rawRegionHeight
+      const cellX = regionX + frameMarginLeft
+      const cellY = regionY + frameMarginTop
+      const cellRight = cellX + columnWidths[column]
+      const cellBottom = cellY + rowHeights[row]
       const cellWidth = Math.max(1, cellRight - cellX)
       const cellHeight = Math.max(1, cellBottom - cellY)
       const frameScale = Math.min(1, cellWidth / frame.width, cellHeight / frame.height)
@@ -235,8 +228,12 @@ export async function composeSpriteSheet(
         name: frame.frame.name,
         x: regionX,
         y: regionY,
-        width: Math.max(1, regionRight - regionX),
-        height: Math.max(1, regionBottom - regionY),
+        width: regionRight - regionX,
+        height: regionBottom - regionY,
+        contentX: cellX,
+        contentY: cellY,
+        contentWidth: cellWidth,
+        contentHeight: cellHeight,
       })
       onProgress(0.5 + (index + 1) / frames.length / 2, `Packing frame ${index + 1} of ${frames.length}`)
     }

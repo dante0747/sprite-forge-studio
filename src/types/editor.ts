@@ -39,7 +39,10 @@ export interface SheetSettings {
   layout: 'automatic' | 'manual'
   rows: number
   columns: number
-  padding: number
+  frameMarginTop: number
+  frameMarginRight: number
+  frameMarginBottom: number
+  frameMarginLeft: number
   spacing: number
   margin: number
   background: 'transparent' | 'black' | 'white' | 'custom'
@@ -80,7 +83,17 @@ export interface SpriteSheetResult {
   cellHeight: number
   rows: number
   columns: number
-  frames: Array<{ name: string; x: number; y: number; width: number; height: number }>
+  frames: Array<{
+    name: string
+    x: number
+    y: number
+    width: number
+    height: number
+    contentX: number
+    contentY: number
+    contentWidth: number
+    contentHeight: number
+  }>
 }
 
 export interface VideoProject {

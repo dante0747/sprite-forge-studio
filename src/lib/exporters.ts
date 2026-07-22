@@ -13,10 +13,12 @@ const escapeXml = (value: string) => value
   .replaceAll('<', '&lt;')
   .replaceAll('>', '&gt;')
 
+const exactPixel = (value: number) => Math.max(0, Math.round(value))
+
 export function projectMetadata(project: VideoProject, sheet: SpriteSheetResult) {
   return {
     app: 'SpriteForge Studio',
-    version: 1,
+    version: 2,
     image: `${project.name}.png`,
     frameWidth: sheet.cellWidth,
     frameHeight: sheet.cellHeight,
@@ -25,9 +27,14 @@ export function projectMetadata(project: VideoProject, sheet: SpriteSheetResult)
     rows: sheet.rows,
     sheetWidth: sheet.width,
     sheetHeight: sheet.height,
-    framePadding: project.sheet.padding,
-    frameSpacing: project.sheet.spacing,
-    sheetMargin: project.sheet.margin,
+    frameMargins: {
+      top: exactPixel(project.sheet.frameMarginTop),
+      right: exactPixel(project.sheet.frameMarginRight),
+      bottom: exactPixel(project.sheet.frameMarginBottom),
+      left: exactPixel(project.sheet.frameMarginLeft),
+    },
+    frameSpacing: exactPixel(project.sheet.spacing),
+    sheetMargin: exactPixel(project.sheet.margin),
     frameRate: project.animation.fps,
     frameData: sheet.frames,
   }
@@ -62,7 +69,7 @@ export function phaserExample(project: VideoProject, sheet: SpriteSheetResult) {
   const orderedFrames = project.animation.reverse ? [...sheet.frames].reverse() : sheet.frames
   const animationFrames = orderedFrames.map((frame) => ({ key, frame: frame.name }))
   const repeat = project.animation.loopMode === 'once' ? 0 : -1
-  return `// Phaser 3 atlas loader and animation setup\n// Atlas metadata supports frame padding, spacing, margins, and variable cell sizes.\nthis.load.atlas(${JSON.stringify(key)}, ${JSON.stringify(`${project.name}.png`)}, 'phaser-atlas.json');\n\nthis.anims.create({\n  key: ${JSON.stringify(key)},\n  frames: ${JSON.stringify(animationFrames, null, 2)},\n  frameRate: ${project.animation.fps},\n  repeat: ${repeat},\n  yoyo: ${project.animation.loopMode === 'ping-pong'}\n});\n`
+  return `// Phaser 3 atlas loader and animation setup\n// Atlas regions include exact per-side frame margins; spacing remains outside each frame.\nthis.load.atlas(${JSON.stringify(key)}, ${JSON.stringify(`${project.name}.png`)}, 'phaser-atlas.json');\n\nthis.anims.create({\n  key: ${JSON.stringify(key)},\n  frames: ${JSON.stringify(animationFrames, null, 2)},\n  frameRate: ${project.animation.fps},\n  repeat: ${repeat},\n  yoyo: ${project.animation.loopMode === 'ping-pong'}\n});\n`
 }
 
 export function phaserAtlas(project: VideoProject, sheet: SpriteSheetResult) {
@@ -115,7 +122,7 @@ export async function createProjectZip(
   }
   zip.file(
     'README.txt',
-    `Exported by SpriteForge Studio\nAnimation: ${project.name}\nChosen frames: ${chosenFrames.length} of ${project.frames.length}\nLargest frame region: ${sheet.cellWidth}x${sheet.cellHeight}\nFrame padding: ${project.sheet.padding}px\nFrame spacing: ${project.sheet.spacing}px\nSheet margin: ${project.sheet.margin}px\n`,
+    `Exported by SpriteForge Studio\nAnimation: ${project.name}\nChosen frames: ${chosenFrames.length} of ${project.frames.length}\nLargest frame region: ${sheet.cellWidth}x${sheet.cellHeight}\nFrame margins (top/right/bottom/left): ${exactPixel(project.sheet.frameMarginTop)}px / ${exactPixel(project.sheet.frameMarginRight)}px / ${exactPixel(project.sheet.frameMarginBottom)}px / ${exactPixel(project.sheet.frameMarginLeft)}px\nSpace between frames: ${exactPixel(project.sheet.spacing)}px\nMinimum sheet-edge margin: ${exactPixel(project.sheet.margin)}px\n`,
   )
   return zip.generateAsync(
     { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } },
