@@ -15,6 +15,9 @@ const escapeXml = (value: string) => value
 
 const exactPixel = (value: number) => Math.max(0, Math.round(value))
 
+export const orderedFrameName = (projectName: string, index: number) =>
+  `${projectName}_${String(index + 1).padStart(2, '0')}`
+
 export function projectMetadata(project: VideoProject, sheet: SpriteSheetResult) {
   return {
     app: 'SpriteForge Studio',
@@ -112,7 +115,7 @@ export async function createProjectZip(
     if (signal.aborted) throw new DOMException('Canceled', 'AbortError')
     const frame = chosenFrames[index]
     const blob = await processChromaBlob(frame.blob, project.chroma)
-    framesFolder?.file(`${frame.name}.png`, blob)
+    framesFolder?.file(`${orderedFrameName(project.name, index)}.png`, blob)
     onProgress((index + 1) / chosenFrames.length * 0.7, `Encoding frame ${index + 1}`)
   }
   zip.file(`metadata.${format}`, serializeMetadata(project, sheet, format))

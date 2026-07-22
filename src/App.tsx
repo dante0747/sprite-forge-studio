@@ -10,7 +10,7 @@ import { ToastStack, type ToastItem } from './components/ToastStack'
 import { TopBar } from './components/TopBar'
 import { useEditor } from './context/EditorContext'
 import { createProject } from './lib/defaults'
-import { createProjectZip } from './lib/exporters'
+import { createProjectZip, orderedFrameName } from './lib/exporters'
 import { offlineFFmpeg } from './lib/ffmpeg'
 import { downloadBlob, formatBytes } from './lib/format'
 import { extractFramesNative, isSupportedVideo, readVideoMetadata } from './lib/media'
@@ -241,7 +241,10 @@ function AppContent() {
       if (!chosenFrames.length) throw new Error('Choose at least one frame before generating a sprite sheet.')
       const controller = begin(task)
       const result = await composeSpriteSheet(
-        chosenFrames,
+        chosenFrames.map((frame, index) => ({
+          ...frame,
+          name: orderedFrameName(project.name, index),
+        })),
         project.chroma,
         project.sheet,
         controller.signal,
@@ -299,7 +302,10 @@ function AppContent() {
       for (let index = 0; index < chosenFrames.length; index += 1) {
         if (controller.signal.aborted) throw new DOMException('Canceled', 'AbortError')
         const frame = chosenFrames[index]
-        zip.file(`${frame.name}.png`, await processChromaBlob(frame.blob, project.chroma))
+        zip.file(
+          `${orderedFrameName(project.name, index)}.png`,
+          await processChromaBlob(frame.blob, project.chroma),
+        )
         progress(task, (index + 1) / chosenFrames.length * 0.8, `Processing frame ${index + 1}`)
       }
       const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' })
