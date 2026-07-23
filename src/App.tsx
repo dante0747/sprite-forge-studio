@@ -393,36 +393,6 @@ function AppContent() {
               view={view}
               setView={setView}
               onColorPick={(color) => updateProject(activeProject.id, { chroma: { ...activeProject.chroma, color }, sheetResult: undefined })}
-              onToggleFrame={(index) => {
-                if (processing.active) return
-                updateFrames(
-                  activeProject.id,
-                  activeProject.frames.map((frame, position) =>
-                    position === index ? { ...frame, included: frame.included === false } : frame,
-                  ),
-                )
-              }}
-              onSetFrameRange={(start, end, included) => {
-                if (processing.active) return
-                const lower = Math.min(start, end)
-                const upper = Math.max(start, end)
-                const frames = activeProject.frames.map((frame, index) =>
-                  index >= lower && index <= upper ? { ...frame, included } : frame,
-                )
-                if (frames.some((frame, index) => frame.included !== activeProject.frames[index].included)) {
-                  updateFrames(activeProject.id, frames)
-                }
-              }}
-              onSetFrameInclusion={(mode) => {
-                if (processing.active) return
-                const frames = activeProject.frames.map((frame) => ({
-                  ...frame,
-                  included: mode === 'all' ? true : mode === 'none' ? false : frame.included === false,
-                }))
-                if (frames.some((frame, index) => frame.included !== activeProject.frames[index].included)) {
-                  updateFrames(activeProject.id, frames)
-                }
-              }}
               onAnimationFpsChange={(fps) => {
                 if (processing.active) return
                 const animation = { ...activeProject.animation, fps }

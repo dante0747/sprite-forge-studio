@@ -66,10 +66,10 @@ Do not set `coderator.dev` as a custom domain on this project repository: that w
 ## Workflow
 
 1. Import one or more clips, or open the included sample. SpriteForge builds a complete frame gallery automatically.
-2. Cherry-pick any number of frames in the gallery while watching the chosen sequence animate live. Adjust its playback speed as needed.
+2. Move frames between the Available and Chosen Sequence rows in the curation tray while watching the independent live preview. Adjust its playback speed as needed.
 3. Optionally trim the source or change the gallery density, then rebuild the gallery.
 4. Sample the background in the Transparency monitor and tune the key.
-5. Copy, cut, paste, remove, rename, replace, or drag groups of frames into order in the timeline.
+5. Copy, cut, paste, remove, rename, replace, or drag chosen frames into order in the same curation tray.
 6. Configure exact per-side frame margins, inter-frame spacing, sheet-edge margin, and layout, then generate the sprite sheet from the chosen sequence.
 7. Preview animation decoded from the generated sheet and export a PNG, chosen-frame ZIP, or complete package.
 
@@ -77,7 +77,7 @@ Do not set `coderator.dev` as a custom domain on this project repository: that w
 
 | Shortcut | Action |
 | --- | --- |
-| `Space` | Play or pause source preview |
+| `Space` | Play or pause the active source or animation preview |
 | `←` / `→` | Previous or next frame |
 | `Delete` | Delete the selected/current frame |
 | `Ctrl/Cmd+A` | Select all frames |

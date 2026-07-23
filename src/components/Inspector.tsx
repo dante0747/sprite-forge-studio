@@ -409,8 +409,12 @@ export function Inspector({
               <Slider label="Playback rate" value={project.animation.fps} min={1} max={60} suffix=" FPS" onChange={(fps) => updateAnimation({ fps })} />
               <Field label="Playback mode"><Select value={project.animation.loopMode} onChange={(e) => updateAnimation({ loopMode: e.target.value as typeof project.animation.loopMode })}><option value="loop">Loop</option><option value="ping-pong">Ping pong</option><option value="once">Play once</option></Select></Field>
               <Toggle label="Reverse playback" checked={project.animation.reverse} onChange={(reverse) => updateAnimation({ reverse })} />
-              <Button variant="ghost" onClick={() => onShowView('animate')} disabled={!project.sheetResult}><Play size={15} /> Preview generated sheet animation</Button>
-              {!project.sheetResult && <span className="section-note">Generate the sprite sheet in Layout before previewing its packed frames.</span>}
+              <Button variant="ghost" onClick={() => onShowView('animate')} disabled={!chosenCount}><Play size={15} /> Preview chosen-frame animation</Button>
+              <span className="section-note">
+                {project.sheetResult
+                  ? 'The animation preview reads the packed frames from the generated sheet.'
+                  : 'Preview the chosen sequence now; generating a sheet is not required.'}
+              </span>
             </Section>
             <Section title="Package settings">
               <Field label="Metadata format"><Select value={preferences.exportMetadata} onChange={(e) => updatePreferences({ exportMetadata: e.target.value as ExportMetadata })}><option value="json">JSON</option><option value="xml">XML</option><option value="csv">CSV</option></Select></Field>

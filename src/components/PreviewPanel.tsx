@@ -13,11 +13,11 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { processCanvasSource } from '../lib/chroma'
 import { clamp, formatTime } from '../lib/format'
 import type { ChromaSettings, VideoProject } from '../types/editor'
-import { Button, IconButton, Segmented, Slider } from './ui/Controls'
+import { IconButton, Segmented, Slider } from './ui/Controls'
 
 export type ViewMode = 'source' | 'frames' | 'key' | 'sheet' | 'animate'
 
@@ -25,28 +25,17 @@ function backdropClass(background: ChromaSettings['previewBackground']) {
   return `preview-backdrop preview-backdrop--${background}`
 }
 
-function CurationMonitor({
+function LiveSelectionMonitor({
   project,
-  frameIndex,
-  setFrameIndex,
-  onToggleFrame,
-  onSetFrameRange,
-  onSetFrameInclusion,
   onAnimationFpsChange,
   disabled,
 }: {
   project: VideoProject
-  frameIndex: number
-  setFrameIndex: (index: number) => void
-  onToggleFrame: (index: number) => void
-  onSetFrameRange: (start: number, end: number, included: boolean) => void
-  onSetFrameInclusion: (mode: 'all' | 'none' | 'invert') => void
   onAnimationFpsChange: (fps: number) => void
   disabled: boolean
 }) {
   const [playing, setPlaying] = useState(true)
   const [previewPosition, setPreviewPosition] = useState(0)
-  const inclusionAnchor = useRef<number | undefined>(undefined)
   const chosenFrames = project.frames.filter((frame) => frame.included !== false)
   const safePreviewPosition = chosenFrames.length ? previewPosition % chosenFrames.length : 0
   const previewFrame = chosenFrames[safePreviewPosition]
@@ -61,102 +50,54 @@ function CurationMonitor({
   }, [chosenFrames.length, playing, project.animation.fps])
 
   return (
-    <div className="curation-monitor">
-      <section className="curation-gallery">
-        <header className="curation-gallery__header">
-          <div>
-            <strong>Choose your animation frames</strong>
-            <span>{chosenFrames.length} of {project.frames.length} included</span>
+    <aside className="curation-live curation-live--standalone">
+      <header>
+        <span>LIVE SELECTION</span>
+        <strong>{chosenFrames.length} frames · {project.animation.fps} FPS</strong>
+      </header>
+      <div className="curation-live__stage checkerboard">
+        {previewFrame ? (
+          <img src={previewFrame.url} alt={`Live preview frame ${safePreviewPosition + 1}`} />
+        ) : (
+          <div className="monitor-placeholder">
+            <Grid3X3 size={25} />
+            <strong>Choose at least one frame</strong>
+            <span>Add frames from the curation tray below.</span>
           </div>
-          <div className="curation-bulk-actions">
-            <Button variant="ghost" disabled={disabled || chosenFrames.length === project.frames.length} onClick={() => onSetFrameInclusion('all')}>All</Button>
-            <Button variant="ghost" disabled={disabled || chosenFrames.length === 0} onClick={() => onSetFrameInclusion('none')}>None</Button>
-            <Button variant="ghost" disabled={disabled || project.frames.length === 0} onClick={() => onSetFrameInclusion('invert')}>Invert</Button>
-          </div>
-        </header>
-        <p className="curation-hint">Click to include or skip. Shift-click applies the same change across a range.</p>
-        <div className="curation-grid">
-          {project.frames.map((frame, index) => {
-            const included = frame.included !== false
-            return (
-              <button
-                key={frame.id}
-                type="button"
-                className={`curation-card ${included ? 'is-included' : 'is-excluded'} ${index === frameIndex ? 'is-current' : ''}`}
-                aria-pressed={included}
-                disabled={disabled}
-                onClick={(event) => {
-                  setFrameIndex(index)
-                  if (event.shiftKey && inclusionAnchor.current !== undefined) {
-                    onSetFrameRange(inclusionAnchor.current, index, !included)
-                  } else {
-                    inclusionAnchor.current = index
-                    onToggleFrame(index)
-                  }
-                }}
-              >
-                <span className="curation-card__image checkerboard">
-                  <img src={frame.url} alt={`Frame ${index + 1} at ${formatTime(frame.sourceTime)}`} loading="lazy" draggable={false} />
-                  <span className="curation-card__check">{included && <Check size={12} />}</span>
-                </span>
-                <span className="curation-card__meta">
-                  <strong>{(index + 1).toString().padStart(3, '0')}</strong>
-                  <small>{formatTime(frame.sourceTime)}</small>
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      </section>
-      <aside className="curation-live">
-        <header>
-          <span>LIVE SELECTION</span>
-          <strong>{chosenFrames.length} frames · {project.animation.fps} FPS</strong>
-        </header>
-        <div className="curation-live__stage checkerboard">
-          {previewFrame ? (
-            <img src={previewFrame.url} alt={`Live preview frame ${safePreviewPosition + 1}`} />
-          ) : (
-            <div className="monitor-placeholder">
-              <Grid3X3 size={25} />
-              <strong>Choose at least one frame</strong>
-              <span>Your live animation will appear here.</span>
-            </div>
-          )}
-        </div>
-        <div className="curation-live__controls">
-          <IconButton
-            label="Previous chosen frame"
-            disabled={!chosenFrames.length}
-            onClick={() => setPreviewPosition((current) => (current - 1 + chosenFrames.length) % chosenFrames.length)}
-          >
-            <SkipBack size={15} />
-          </IconButton>
-          <IconButton
-            label={playing ? 'Pause live preview' : 'Play live preview'}
-            className="play-button"
-            disabled={!chosenFrames.length}
-            onClick={() => setPlaying((current) => !current)}
-          >
-            {playing ? <Pause size={17} /> : <Play size={17} />}
-          </IconButton>
-          <IconButton
-            label="Next chosen frame"
-            disabled={!chosenFrames.length}
-            onClick={() => setPreviewPosition((current) => (current + 1) % chosenFrames.length)}
-          >
-            <SkipForward size={15} />
-          </IconButton>
-          <span>{chosenFrames.length ? `${safePreviewPosition + 1} / ${chosenFrames.length}` : '0 / 0'}</span>
-        </div>
-        <label className="curation-live__fps">
-          <span>Playback speed</span>
-          <input type="range" min={1} max={60} value={project.animation.fps} disabled={disabled} onChange={(event) => onAnimationFpsChange(Number(event.target.value))} />
-          <output>{project.animation.fps} FPS</output>
-        </label>
-        <p>Updates instantly as you cherry-pick. Sprite-sheet generation uses this exact sequence.</p>
-      </aside>
-    </div>
+        )}
+      </div>
+      <div className="curation-live__controls">
+        <IconButton
+          label="Previous chosen frame"
+          disabled={!chosenFrames.length}
+          onClick={() => setPreviewPosition((current) => (current - 1 + chosenFrames.length) % chosenFrames.length)}
+        >
+          <SkipBack size={15} />
+        </IconButton>
+        <IconButton
+          label={playing ? 'Pause live preview' : 'Play live preview'}
+          className="play-button"
+          disabled={!chosenFrames.length}
+          onClick={() => setPlaying((current) => !current)}
+        >
+          {playing ? <Pause size={17} /> : <Play size={17} />}
+        </IconButton>
+        <IconButton
+          label="Next chosen frame"
+          disabled={!chosenFrames.length}
+          onClick={() => setPreviewPosition((current) => (current + 1) % chosenFrames.length)}
+        >
+          <SkipForward size={15} />
+        </IconButton>
+        <span>{chosenFrames.length ? `${safePreviewPosition + 1} / ${chosenFrames.length}` : '0 / 0'}</span>
+      </div>
+      <label className="curation-live__fps">
+        <span>Playback speed</span>
+        <input type="range" min={1} max={60} value={project.animation.fps} disabled={disabled} onChange={(event) => onAnimationFpsChange(Number(event.target.value))} />
+        <output>{project.animation.fps} FPS</output>
+      </label>
+      <p>The preview updates immediately as you change the chosen sequence below.</p>
+    </aside>
   )
 }
 
@@ -302,22 +243,45 @@ function SheetMonitor({ project }: { project: VideoProject }) {
 
 function AnimationMonitor({
   project,
-  frameIndex,
   setFrameIndex,
+  onAnimationFpsChange,
+  disabled,
 }: {
   project: VideoProject
-  frameIndex: number
   setFrameIndex: (index: number) => void
+  onAnimationFpsChange: (fps: number) => void
+  disabled: boolean
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [playing, setPlaying] = useState(true)
   const [loadedSheet, setLoadedSheet] = useState<{ url: string; bitmap: ImageBitmap }>()
-  const [sheetError, setSheetError] = useState<string>()
+  const [sheetError, setSheetError] = useState<{ url: string; message: string }>()
   const direction = useRef(1)
-  const initialized = useRef(false)
   const result = project.sheetResult
+  const chosenFrames = useMemo(
+    () => project.frames
+      .map((frame, sourceIndex) => ({ frame, sourceIndex }))
+      .filter(({ frame }) => frame.included !== false),
+    [project.frames],
+  )
+  const frameCount = result?.frames.length ?? chosenFrames.length
   const sheetBitmap = loadedSheet && loadedSheet.url === result?.url ? loadedSheet.bitmap : undefined
-  const playhead = result?.frames.length ? clamp(frameIndex, 0, result.frames.length - 1) : 0
+  const [playheadPosition, setPlayheadPosition] = useState(() =>
+    project.animation.reverse ? Math.max(0, frameCount - 1) : 0,
+  )
+  const playhead = frameCount ? clamp(playheadPosition, 0, frameCount - 1) : 0
+  const previewFrame = chosenFrames[playhead]?.frame
+  const activeFrameName = result?.frames[playhead]?.name ?? previewFrame?.name ?? `Frame ${playhead + 1}`
+  const playheadProgress = frameCount > 1 ? (playhead / (frameCount - 1)) * 100 : 0
+  const fpsProgress = ((project.animation.fps - 1) / 59) * 100
+
+  const showFrame = useCallback((position: number) => {
+    if (!frameCount) return
+    const next = clamp(position, 0, frameCount - 1)
+    direction.current = 1
+    setPlayheadPosition(next)
+    setFrameIndex(chosenFrames[next]?.sourceIndex ?? next)
+  }, [chosenFrames, frameCount, setFrameIndex])
 
   useEffect(() => {
     let disposed = false
@@ -332,7 +296,10 @@ function AnimationMonitor({
         }
       })
       .catch(() => {
-        if (!disposed) setSheetError('Could not decode the generated sheet preview.')
+        if (!disposed) setSheetError({
+          url: result.url,
+          message: 'Could not decode the generated sheet preview.',
+        })
       })
     return () => {
       disposed = true
@@ -341,34 +308,32 @@ function AnimationMonitor({
   }, [result])
 
   useEffect(() => {
-    if (initialized.current) return
-    initialized.current = true
-    if (result?.frames.length) setFrameIndex(project.animation.reverse ? result.frames.length - 1 : 0)
-  }, [project.animation.reverse, result, setFrameIndex])
-
-  useEffect(() => {
-    if (!playing || !result?.frames.length || !sheetBitmap) return
+    if (!playing || frameCount < 2 || (result && !sheetBitmap)) return
     const timer = window.setInterval(() => {
-      const last = result.frames.length - 1
-      const playbackDirection = project.animation.reverse ? -1 : 1
-      let next = playhead + direction.current * playbackDirection
-      if (project.animation.loopMode === 'ping-pong') {
-        if (next > last || next < 0) {
-          direction.current *= -1
-          next = clamp(playhead + direction.current * playbackDirection, 0, last)
+      setPlayheadPosition((currentPosition) => {
+        const last = frameCount - 1
+        const current = clamp(currentPosition, 0, last)
+        const playbackDirection = project.animation.reverse ? -1 : 1
+        let next = current + direction.current * playbackDirection
+        if (project.animation.loopMode === 'ping-pong') {
+          if (next > last || next < 0) {
+            direction.current *= -1
+            next = clamp(current + direction.current * playbackDirection, 0, last)
+          }
+        } else if (project.animation.loopMode === 'once') {
+          if (next > last || next < 0) {
+            setPlaying(false)
+            return current
+          }
+        } else {
+          next = next > last ? 0 : next < 0 ? last : next
         }
-      } else if (project.animation.loopMode === 'once') {
-        if (next > last || next < 0) {
-          setPlaying(false)
-          return
-        }
-      } else {
-        next = next > last ? 0 : next < 0 ? last : next
-      }
-      setFrameIndex(next)
+        setFrameIndex(chosenFrames[next]?.sourceIndex ?? next)
+        return next
+      })
     }, 1000 / Math.max(1, project.animation.fps))
     return () => clearInterval(timer)
-  }, [playhead, playing, project.animation, result, setFrameIndex, sheetBitmap])
+  }, [chosenFrames, frameCount, playing, project.animation, result, setFrameIndex, sheetBitmap])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -393,50 +358,115 @@ function AnimationMonitor({
     )
   }, [playhead, result, sheetBitmap])
 
-  const togglePlayback = () => {
+  const togglePlayback = useCallback(() => {
     if (playing) {
       setPlaying(false)
       return
     }
     if (project.animation.loopMode === 'once') {
-      const endFrame = project.animation.reverse ? 0 : Math.max(0, (result?.frames.length ?? 1) - 1)
+      const endFrame = project.animation.reverse ? 0 : Math.max(0, frameCount - 1)
       if (playhead === endFrame) {
-        setFrameIndex(project.animation.reverse ? Math.max(0, (result?.frames.length ?? 1) - 1) : 0)
+        showFrame(project.animation.reverse ? Math.max(0, frameCount - 1) : 0)
       }
     }
     setPlaying(true)
+  }, [frameCount, playhead, playing, project.animation.loopMode, project.animation.reverse, showFrame])
+
+  useEffect(() => {
+    const handler = () => togglePlayback()
+    window.addEventListener('spriteforge:toggle-play', handler)
+    return () => window.removeEventListener('spriteforge:toggle-play', handler)
+  }, [togglePlayback])
+
+  const stepTo = (position: number) => {
+    setPlaying(false)
+    showFrame((position + frameCount) % frameCount)
   }
 
-  if (!result) {
+  if (!frameCount) {
     return (
       <div className="monitor-placeholder">
         <Play size={30} />
-        <strong>Generate a sprite sheet first</strong>
-        <span>Animation playback reads packed frame regions from the generated PNG.</span>
+        <strong>Choose at least one frame</strong>
+        <span>The chosen sequence can be animated before generating a sprite sheet.</span>
       </div>
     )
   }
+
   return (
     <div className="animation-monitor">
       <div className={backdropClass(project.chroma.previewBackground)}>
-        <canvas ref={canvasRef} />
-        {!sheetBitmap && <span className="monitor-busy">{sheetError ?? 'Loading packed sheet…'}</span>}
-        <span className="resolution-badge">Packed sheet · {result.width} × {result.height}</span>
+        {result ? (
+          <>
+            <canvas ref={canvasRef} />
+            {!sheetBitmap && (
+              <span className="monitor-busy">
+                {sheetError?.url === result.url ? sheetError.message : 'Loading packed sheet…'}
+              </span>
+            )}
+          </>
+        ) : (
+          <img src={previewFrame?.url} alt={`Chosen animation frame ${playhead + 1}`} />
+        )}
+        <div className="animation-stage-status">
+          <span>{result ? 'PACKED SHEET' : 'BEFORE GENERATION'}</span>
+          <strong title={activeFrameName}>{activeFrameName}</strong>
+        </div>
+        <span className="resolution-badge">
+          {result
+            ? `Packed sheet · ${result.width} × ${result.height}`
+            : `Chosen frames · ${previewFrame?.width ?? 0} × ${previewFrame?.height ?? 0}`}
+        </span>
       </div>
-      <div className="animation-controls">
-        <IconButton label="First packed frame" onClick={() => setFrameIndex(0)}>
-          <SkipBack size={16} />
-        </IconButton>
-        <IconButton label={playing ? 'Pause' : 'Play'} className="play-button" onClick={togglePlayback}>
-          {playing ? <Pause size={18} /> : <Play size={18} />}
-        </IconButton>
-        <IconButton
-          label="Next packed frame"
-          onClick={() => setFrameIndex((playhead + 1) % result.frames.length)}
-        >
-          <SkipForward size={16} />
-        </IconButton>
-        <span>Sheet frame {playhead + 1} / {result.frames.length}</span>
+      <div className="animation-control-deck">
+        <div className="animation-transport-controls">
+          <IconButton label="First chosen frame" onClick={() => stepTo(0)}>
+            <SkipBack size={16} />
+          </IconButton>
+          <IconButton label="Previous chosen frame" onClick={() => stepTo(playhead - 1)}>
+            <ChevronLeft size={18} />
+          </IconButton>
+          <IconButton label={playing ? 'Pause animation' : 'Play animation'} className="play-button" onClick={togglePlayback}>
+            {playing ? <Pause size={20} /> : <Play size={20} />}
+          </IconButton>
+          <IconButton label="Next chosen frame" onClick={() => stepTo(playhead + 1)}>
+            <ChevronRight size={18} />
+          </IconButton>
+          <IconButton label="Last chosen frame" onClick={() => stepTo(frameCount - 1)}>
+            <SkipForward size={16} />
+          </IconButton>
+        </div>
+        <label className="animation-scrubber">
+          <span>
+            <strong>Frame {playhead + 1} of {frameCount}</strong>
+            <small>{project.animation.loopMode === 'ping-pong' ? 'Ping pong' : project.animation.loopMode === 'once' ? 'Play once' : 'Looping'}{project.animation.reverse ? ' · Reverse' : ''}</small>
+          </span>
+          <input
+            aria-label="Animation frame"
+            type="range"
+            min={0}
+            max={Math.max(0, frameCount - 1)}
+            value={playhead}
+            style={{ '--range-progress': `${playheadProgress}%` } as React.CSSProperties}
+            onChange={(event) => stepTo(Number(event.target.value))}
+          />
+        </label>
+        <label className="animation-speed">
+          <span>
+            <strong>{project.animation.fps} FPS</strong>
+            <small>Playback speed</small>
+          </span>
+          <input
+            aria-label="Animation playback speed"
+            type="range"
+            min={1}
+            max={60}
+            value={project.animation.fps}
+            disabled={disabled}
+            style={{ '--range-progress': `${fpsProgress}%` } as React.CSSProperties}
+            onChange={(event) => onAnimationFpsChange(Number(event.target.value))}
+          />
+        </label>
       </div>
     </div>
   )
@@ -449,9 +479,6 @@ export function PreviewPanel({
   view,
   setView,
   onColorPick,
-  onToggleFrame,
-  onSetFrameRange,
-  onSetFrameInclusion,
   onAnimationFpsChange,
   disabled,
 }: {
@@ -461,9 +488,6 @@ export function PreviewPanel({
   view: ViewMode
   setView: (view: ViewMode) => void
   onColorPick: (color: string) => void
-  onToggleFrame: (index: number) => void
-  onSetFrameRange: (start: number, end: number, included: boolean) => void
-  onSetFrameInclusion: (mode: 'all' | 'none' | 'invert') => void
   onAnimationFpsChange: (fps: number) => void
   disabled: boolean
 }) {
@@ -526,7 +550,7 @@ export function PreviewPanel({
   }
 
   return (
-    <main className="preview-panel">
+    <main className={`preview-panel ${view === 'animate' ? 'preview-panel--animate' : ''} ${view === 'frames' ? 'preview-panel--curation' : ''}`}>
       <header className="viewer-toolbar">
         <Segmented
           value={view}
@@ -593,16 +617,17 @@ export function PreviewPanel({
           {view === 'key' && <ChromaMonitor project={project} frameIndex={frameIndex} onColorPick={onColorPick} />}
           {view === 'sheet' && <SheetMonitor project={project} />}
           {view === 'animate' && (
-            <AnimationMonitor key={`${project.sheetResult?.url ?? project.id}:${project.animation.reverse}`} project={project} frameIndex={frameIndex} setFrameIndex={setFrameIndex} />
+            <AnimationMonitor
+              key={`${project.sheetResult?.url ?? project.id}:${project.animation.reverse}`}
+              project={project}
+              setFrameIndex={setFrameIndex}
+              onAnimationFpsChange={onAnimationFpsChange}
+              disabled={disabled}
+            />
           )}
           {view === 'frames' && (
-            <CurationMonitor
+            <LiveSelectionMonitor
               project={project}
-              frameIndex={frameIndex}
-              setFrameIndex={setFrameIndex}
-              onToggleFrame={onToggleFrame}
-              onSetFrameRange={onSetFrameRange}
-              onSetFrameInclusion={onSetFrameInclusion}
               onAnimationFpsChange={onAnimationFpsChange}
               disabled={disabled}
             />
